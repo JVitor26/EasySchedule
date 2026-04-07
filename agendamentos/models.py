@@ -197,6 +197,12 @@ class PlanoMensal(models.Model):
     pago_em = models.DateTimeField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    
+    # Stripe integration (centralized model)
+    stripe_session_id = models.CharField(max_length=255, blank=True, null=True, db_index=True, help_text="Stripe Checkout Session ID")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Payment Intent ID")
+    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID (optional for guests)")
+    stripe_synced_at = models.DateTimeField(blank=True, null=True, help_text="Last sync with Stripe")
 
     class Meta:
         ordering = ["-mes_referencia", "-criado_em"]
@@ -306,6 +312,12 @@ class Pagamento(models.Model):
     pago_em = models.DateTimeField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+    
+    # Stripe integration (centralized model)
+    stripe_session_id = models.CharField(max_length=255, blank=True, null=True, db_index=True, help_text="Stripe Checkout Session ID")
+    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Payment Intent ID")
+    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID (optional for guests)")
+    stripe_synced_at = models.DateTimeField(blank=True, null=True, help_text="Last sync with Stripe")
 
     class Meta:
         ordering = ["-criado_em"]

@@ -424,3 +424,150 @@ class PasswordRecoveryTests(TestCase):
         self.assertTrue(self.cliente.check_portal_password("nova-senha-portal"))
         self.assertEqual(self.client.session[f"portal_cliente_empresa_{self.empresa.pk}"], self.cliente.pk)
         self.assertIsNotNone(recovery.usado_em)
+
+
+class StripeIntegrationTests(TestCase):
+	"""Test Stripe payment integration"""
+	
+	def setUp(self):
+		self.owner = User.objects.create_user(
+			username="empresa-stripe@example.com",
+			email="empresa-stripe@example.com",
+			password="senha-forte-123",
+		)
+		self.empresa = Empresa.objects.create(
+			usuario=self.owner,
+			nome="Studio Yoga",
+			tipo="aula",
+			cnpj="12345678000101",
+		)
+		self.profissional = Profissional.objects.create(
+			empresa=self.empresa,
+			nome="Mestre Yoga",
+			especialidade="Yoga",
+			telefone="65999999998",
+			email="mestre@example.com",
+			ativo=True,
+		)
+		self.servico = Servico.objects.create(
+			empresa=self.empresa,
+			nome="Aula de Yoga",
+			categoria="aula",
+			descricao="Aula de yoga hatha",
+			preco=100.00,
+			tempo=60,
+			ativo=True,
+		)
+		self.cliente = Pessoa.objects.create(
+			empresa=self.empresa,
+			nome="Cliente Yoga",
+			telefone="65999991111",
+			email="cliente@example.com",
+		)
+		self.data_agendamento = timezone.localdate() + timedelta(days=5)
+	
+	def test_stripe_transaction_model_created(self):
+		"""Test that StripeTransaction model exists and can be created"""
+		from core.models import StripeTransaction
+		
+		tx = StripeTransaction.objects.create(
+			stripe_session_id="cs_test_123456789",
+			empresa=self.empresa,
+			object_type="agendamento",
+			object_id=1,
+			amount_total=100.00,
+			customer_email="test@example.com",
+		)
+		
+		self.assertTrue(tx.is_pending)
+		self.assertFalse(tx.is_successful)
+		self.assertFalse(tx.is_failed)
+		self.assertEqual(tx.status, "pending")
+	
+	def test_pagamento_has_stripe_fields(self):
+		"""Test that Pagamento model has Stripe fields"""
+		agendamento = Agendamento.objects.create(
+			empresa=self.empresa,
+			cliente=self.cliente,
+			servico=self.servico,
+			profissional=self.profissional,
+			data=self.data_agendamento,
+			hora=timezone.localtime().time(),
+		)
+		
+		pagamento = Pagamento.objects.create(
+			empresa=self.empresa,
+			agendamento=agendamento,
+			cliente=self.cliente,
+			valor=100.00,
+		)
+		
+		# Check Stripe fields exist
+		self.assertIsNone(pagamento.stripe_session_id)
+		self.assertIsNone(pagamento.stripe_payment_intent_id)
+		self.assertIsNone(pagamento.stripe_customer_id)
+		self.assertIsNone(pagamento.stripe_synced_at)
+		
+		# Set Stripe fields
+		pagamento.stripe_session_id = "cs_test_123"
+		pagamento.save()
+		
+		pagamento_reloaded = Pagamento.objects.get(pk=pagamento.pk)
+		self.assertEqual(pagamento_reloaded.stripe_session_id, "cs_test_123")
+	
+	def test_plano_mensal_has_stripe_fields(self):
+		"""Test that PlanoMensal model has Stripe fields"""
+		from datetime import date
+		mes_ref = date(2026, 4, 1)
+		
+		plano = PlanoMensal.objects.create(
+			empresa=self.empresa,
+			cliente=self.cliente,
+			servico=self.servico,
+			profissional=self.profissional,
+			mes_referencia=mes_ref,
+			dia_semana=0,  # Monday
+			hora=timezone.localtime().time(),
+			valor_mensal=400.00,
+			quantidade_encontros=4,
+		)
+		
+		# Check Stripe fields exist
+		self.assertIsNone(plano.stripe_session_id)
+		self.assertIsNone(plano.stripe_payment_intent_id)
+		self.assertIsNone(plano.stripe_customer_id)
+		self.assertIsNone(plano.stripe_synced_at)
+		
+		# Set Stripe fields
+		plano.stripe_session_id = "cs_test_plano_123"
+		plano.save()
+		
+		plano_reloaded = PlanoMensal.objects.get(pk=plano.pk)
+		self.assertEqual(plano_reloaded.stripe_session_id, "cs_test_plano_123")
+	
+	def test_stripe_checkout_endpoint_exists(self):
+		"""Test that Stripe checkout API endpoints exist"""
+		agendamento = Agendamento.objects.create(
+			empresa=self.empresa,
+			cliente=self.cliente,
+			servico=self.servico,
+			profissional=self.profissional,
+			data=self.data_agendamento,
+			hora=timezone.localtime().time(),
+		)
+		pagamento = Pagamento.objects.create(
+			empresa=self.empresa,
+			agendamento=agendamento,
+			cliente=self.cliente,
+			valor=100.00,
+		)
+		
+		# Note: This will fail in test since Stripe SDK needs valid keys
+		# But we're testing that the endpoint is properly routed
+		url = reverse("stripe_checkout_agendamento_api", kwargs={"pagamento_id": pagamento.pk})
+		self.assertIn("/stripe/checkout/agendamento/", url)
+	
+	def test_stripe_webhook_endpoint_exists(self):
+		"""Test that Stripe webhook endpoint exists"""
+		url = reverse("stripe_webhook")
+		self.assertIn("/stripe/webhook/", url)

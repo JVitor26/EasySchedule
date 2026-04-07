@@ -130,3 +130,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@easyschedule.local')
 WHATSAPP_WEBHOOK_URL = os.getenv('WHATSAPP_WEBHOOK_URL', '')
+
+# 💳 Stripe Configuration (Centralized Model)
+STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', 'pk_not_configured')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', 'sk_not_configured')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', 'whsec_not_configured')
+STRIPE_API_VERSION = '2026-03-25.dahlia'  # Latest Stripe API version
+STRIPE_DOMAIN_URL = os.getenv('STRIPE_DOMAIN_URL', 'http://localhost:8000')
+STRIPE_DEFAULT_CURRENCY = os.getenv('STRIPE_DEFAULT_CURRENCY', 'brl')

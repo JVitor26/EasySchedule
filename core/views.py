@@ -1126,6 +1126,190 @@ def cliente_minha_conta(request, empresa_id):
     })
 
 
+# ============================================
+# 💳 STRIPE CHECKOUT & PAYMENT INTEGRATION
+# ============================================
+
+@require_http_methods(["GET", "POST"])
+def stripe_checkout_agendamento_api(request, pagamento_id):
+	"""
+	Create a Stripe Checkout Session for a single appointment payment.
+	GET: Returns checkout URL
+	"""
+	from .stripe_helpers import create_checkout_session, StripeCheckoutError
+	
+	pagamento = get_object_or_404(Pagamento, pk=pagamento_id)
+	
+	if request.method == "GET":
+		try:
+			session_id = create_checkout_session(
+				pagamento,
+				payment_type="agendamento",
+				request=request
+			)
+			
+			return JsonResponse({
+				"status": "sucesso",
+				"session_id": session_id,
+				"checkout_url": f"https://checkout.stripe.com/pay/{session_id}",
+				"public_key": settings.STRIPE_PUBLIC_KEY,
+			})
+		except StripeCheckoutError as e:
+			return JsonResponse({"status": "erro", "message": str(e)}, status=400)
+		except Exception as e:
+			return JsonResponse({"status": "erro", "message": f"Erro ao criar checkout: {str(e)}"}, status=500)
+	
+	# POST: Update payment after checkout
+	if pagamento.status == "pago":
+		return JsonResponse({"status": "sucesso", "message": "Pagamento já foi processado"})
+	
+	return JsonResponse({"status": "info", "message": "Aguardando confirmação do Stripe"})
+
+
+@require_http_methods(["GET", "POST"])
+def stripe_checkout_plano_api(request, plano_id):
+	"""
+	Create a Stripe Checkout Session for a monthly subscription payment.
+	GET: Returns checkout URL  
+	"""
+	from .stripe_helpers import create_checkout_session, StripeCheckoutError
+	
+	plano = get_object_or_404(PlanoMensal, pk=plano_id)
+	
+	if request.method == "GET":
+		try:
+			session_id = create_checkout_session(
+				plano,
+				payment_type="plano",
+				request=request
+			)
+			
+			return JsonResponse({
+				"status": "sucesso",
+				"session_id": session_id,
+				"checkout_url": f"https://checkout.stripe.com/pay/{session_id}",
+				"public_key": settings.STRIPE_PUBLIC_KEY,
+			})
+		except StripeCheckoutError as e:
+			return JsonResponse({"status": "erro", "message": str(e)}, status=400)
+		except Exception as e:
+			return JsonResponse({"status": "erro", "message": f"Erro ao criar checkout: {str(e)}"}, status=500)
+	
+	# POST: Update payment after checkout
+	if plano.pagamento_status == "pago":
+		return JsonResponse({"status": "sucesso", "message": "Pagamento já foi processado"})
+	
+	return JsonResponse({"status": "info", "message": "Aguardando confirmação do Stripe"})
+
+
+@require_http_methods(["POST"])
+def stripe_webhook(request):
+	"""
+	Handle Stripe webhook events.
+	Events:
+	- checkout.session.completed: Payment successful
+	- payment_intent.payment_failed: Payment failed
+	"""
+	import stripe
+	from .stripe_helpers import (
+		handle_checkout_session_completed,
+		handle_payment_intent_failed,
+	)
+	
+	payload = request.body
+	sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+	
+	try:
+		event = stripe.Webhook.construct_event(
+			payload,
+			sig_header,
+			settings.STRIPE_WEBHOOK_SECRET
+		)
+	except ValueError:
+		return HttpResponse(status=400)
+	except stripe.error.SignatureVerificationError:
+		return HttpResponse(status=400)
+	
+	# Handle events
+	if event['type'] == 'checkout.session.completed':
+		session_id = event['data']['object']['id']
+		result = handle_checkout_session_completed(session_id)
+		if not result.get('success'):
+			return JsonResponse(result, status=400)
+	
+	elif event['type'] == 'payment_intent.payment_failed':
+		payment_intent_id = event['data']['object']['id']
+		result = handle_payment_intent_failed(payment_intent_id)
+		if not result.get('success'):
+			return JsonResponse(result, status=400)
+	
+	return HttpResponse(status=200)
+
+
+@require_http_methods(["GET"])
+def stripe_checkout_success(request):
+	"""
+	Redirect page after successful Stripe checkout.
+	Syncs payment status with Stripe and confirms locally.
+	"""
+	from .stripe_helpers import retrieve_checkout_session, sync_payment_with_stripe
+	from core.models import StripeTransaction
+	
+	session_id = request.GET.get('session_id')
+	if not session_id:
+		messages.warning(request, "Sessão de checkout não encontrada.")
+		return redirect('home')
+	
+	# Retrieve session
+	session = retrieve_checkout_session(session_id)
+	if not session:
+		messages.error(request, "Sessão de checkout inválida.")
+		return redirect('home')
+	
+	# Find StripeTransaction
+	stripe_tx = StripeTransaction.objects.filter(stripe_session_id=session_id).first()
+	if not stripe_tx:
+		messages.error(request, "Transação não encontrada.")
+		return redirect('home')
+	
+	# Sync payment if successful
+	if session.payment_status == "paid":
+		if stripe_tx.object_type == "agendamento":
+			pagamento = Pagamento.objects.filter(agendamento_id=stripe_tx.object_id).first()
+			if pagamento:
+				sync_payment_with_stripe(pagamento, "agendamento")
+				messages.success(request, "Pagamento confirmado com sucesso!")
+				return redirect('payment_detail', token=pagamento.referencia_publica)
+		
+		elif stripe_tx.object_type == "plano":
+			plano = PlanoMensal.objects.filter(id=stripe_tx.object_id).first()
+			if plano:
+				sync_payment_with_stripe(plano, "plano")
+				messages.success(request, "Pagamento do plano confirmado!")
+				return redirect('plan_payment_detail', token=plano.referencia_publica)
+	
+	messages.info(request, "Continuando processamento do pagamento...")
+	return JsonResponse({"status": "processing", "session_id": session_id})
+
+
+@require_http_methods(["GET"])
+def stripe_checkout_cancel(request):
+	"""
+	Redirect page when customer cancels Stripe checkout.
+	"""
+	session_id = request.GET.get('session_id')
+	item_type = request.GET.get('type', 'agendamento')
+	
+	messages.warning(request, "Você cancelou o checkout. Seu pagamento foi preservado.")
+	
+	if item_type == "agendamento":
+		return redirect('home')
+	elif item_type == "plano":
+		return redirect('home')
+	
+	return redirect('home')
+
+
 def service_worker_js(_request):
         content = """
 const CACHE_NAME = 'easyschedule-pwa-v1';
