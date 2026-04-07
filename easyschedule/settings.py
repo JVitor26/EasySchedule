@@ -14,6 +14,10 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['easyschedule-0j0e.onrender.com']
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://easyschedule-0j0e.onrender.com'
+]
+
 
 # 🔧 Aplicações
 INSTALLED_APPS = [
