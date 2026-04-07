@@ -5,7 +5,7 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'css/pages.css' %}">
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/dist/index.global.min.css" rel="stylesheet" onerror="this.onerror=null;">
 
 <section
   class="agenda-page"
@@ -240,6 +240,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/dist/index.global.min.js" onerror="console.warn('FullCalendar library failed to load from CDN');"></script>
 <script src="{% static 'js/agenda.js' %}"></script>
 {% endblock %}
