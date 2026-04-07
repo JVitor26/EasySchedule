@@ -1,4 +1,6 @@
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
+from django.utils import timezone
 from empresas.models import Empresa
 import re
 
@@ -13,6 +15,8 @@ class Pessoa(models.Model):
     data_nascimento = models.DateField(blank=True, null=True)
     endereco = models.TextField(blank=True)
     observacoes = models.TextField(blank=True)
+    portal_password = models.CharField(max_length=128, blank=True)
+    portal_password_updated_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         return self.nome
@@ -57,6 +61,19 @@ class Pessoa(models.Model):
         if not self.email:
             return ""
         return self.email.strip().lower()
+
+    @property
+    def has_portal_password(self):
+        return bool(self.portal_password)
+
+    def set_portal_password(self, raw_password):
+        self.portal_password = make_password(raw_password)
+        self.portal_password_updated_at = timezone.now()
+
+    def check_portal_password(self, raw_password):
+        if not self.portal_password:
+            return False
+        return check_password(raw_password, self.portal_password)
 
     # 🔥 SALVAR PADRONIZADO NO BANCO
     def save(self, *args, **kwargs):

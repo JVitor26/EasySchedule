@@ -1,12 +1,18 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from .models import Profissional
 from .forms import ProfissionalForm
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
+from empresas.permissions import is_profissional_user
 
 @login_required
 def profissionais_list(request):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -18,6 +24,10 @@ def profissionais_list(request):
 
 @login_required
 def profissionais_form(request, pk=None):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -31,11 +41,31 @@ def profissionais_form(request, pk=None):
     profile = get_business_profile(empresa.tipo)
     termo_profissional = profile['professional_term_singular']
 
+    if profissional is None and not empresa.can_add_profissional():
+        messages.error(
+            request,
+            f"Seu plano permite ate {empresa.limite_profissionais} profissional(is) ativo(s). "
+            "Faça upgrade para liberar mais vagas.",
+        )
+        return redirect('profissionais_list')
+
     if request.method == 'POST':
         form = ProfissionalForm(request.POST, instance=profissional, empresa=empresa)
         if form.is_valid():
             profissional = form.save(commit=False)
             profissional.empresa = empresa
+
+            if not empresa.permite_acesso_profissional:
+                profissional.usuario = None
+
+            if profissional.pk is None and profissional.ativo and not empresa.can_add_profissional():
+                form.add_error(None, f"Limite do plano atingido ({empresa.limite_profissionais} profissional(is) ativos).")
+                return render(request, 'profissionais/profissionais_form.html', {
+                    'form': form,
+                    'page_title': f"Editar {termo_profissional}" if profissional else f"Novo {termo_profissional}",
+                    'page_subtitle': f"Registre a equipe e a especialidade de cada {termo_profissional.lower()}.",
+                })
+
             profissional.save()
             return redirect('profissionais_list')
     else:
@@ -50,6 +80,10 @@ def profissionais_form(request, pk=None):
 
 @login_required
 def profissionais_delete(request, pk):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:

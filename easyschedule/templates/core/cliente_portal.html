@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Portal do Cliente - EasySchedule{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
+
+<section class="client-landing">
+  <header class="client-hero">
+    <div class="client-hero-copy">
+      <p class="client-eyebrow">Portal do cliente</p>
+      <h1>Gerenciar meus agendamentos</h1>
+      <p class="client-subtitle">
+        Acesse seus agendamentos com empresas, produtos e pacotes contratados. 
+        Esta área é para clientes que já possuem cadastro.
+      </p>
+    </div>
+    <div class="client-hero-panel">
+      <strong>Meus agendamentos</strong>
+      <span>Histórico de reservas</span>
+      <span>Pacotes contratados</span>
+      <span>Minha conta</span>
+    </div>
+  </header>
+
+  <section class="client-company-grid">
+    {% for empresa in empresas %}
+    <article class="client-company-card">
+      <span class="company-pill">{{ empresa.business_profile.label }}</span>
+      <h2>{{ empresa.nome }}</h2>
+      <p>Gerenciar seus agendamentos, pacotes mensais e informativos sobre {{ empresa.business_profile.professional_term_plural|lower }} disponíveis.</p>
+      <a class="btn-success" href="{% url 'cliente_empresa' empresa.id %}">Acessar portal</a>
+    </article>
+    {% empty %}
+    <div class="client-empty">
+      <strong>Você ainda não tem agendamentos.</strong>
+      <p><a href="{% url 'cliente_home' %}">Clique aqui para fazer seu primeiro agendamento ↗</a></p>
+    </div>
+    {% endfor %}
+  </section>
+</section>
+{% endblock %}

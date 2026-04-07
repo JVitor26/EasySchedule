@@ -11,6 +11,7 @@ class Produto(models.Model):
     especificacoes = models.TextField(blank=True)
     preco = models.DecimalField(max_digits=10, decimal_places=2)
     estoque = models.PositiveIntegerField(default=0)
+    estoque_reservado = models.PositiveIntegerField(default=0, help_text="Quantidade reservada em agendamentos não pagos")
     foto = models.FileField(upload_to="produtos/", blank=True)
     ativo = models.BooleanField(default=True)
     destaque_publico = models.BooleanField(default=True)
@@ -19,6 +20,11 @@ class Produto(models.Model):
 
     class Meta:
         ordering = ["nome"]
+
+    @property
+    def estoque_disponivel(self):
+        """Calcula estoque disponível (total - reservado)"""
+        return self.estoque - self.estoque_reservado
 
     def __str__(self):
         return self.nome

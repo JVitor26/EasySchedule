@@ -64,7 +64,15 @@ class Agendamento(models.Model):
         errors = {}
 
         if self.data and self.data < timezone.localdate():
-            errors["data"] = "Não é possível agendar para uma data passada."
+            original_date = None
+            if self.pk:
+                try:
+                    original_date = self.__class__.objects.values_list('data', flat=True).get(pk=self.pk)
+                except self.__class__.DoesNotExist:
+                    original_date = None
+
+            if original_date is None or original_date >= timezone.localdate():
+                errors["data"] = "Não é possível agendar para uma data passada."
 
         if self.empresa_id:
             if self.cliente_id and self.cliente.empresa_id != self.empresa_id:
@@ -347,6 +355,27 @@ class Pagamento(models.Model):
         if self.agendamento.status == "pendente":
             self.agendamento.status = "confirmado"
         self.agendamento.save()
+        
+        # Processar produtos pagos
+        self._process_paid_products()
+
+    def _process_paid_products(self):
+        """
+        Ao confirmar pagamento, marca todos os produtos como pagos
+        e deduz do estoque (sai de reservado para vendido)
+        """
+        produtos_agendamento = self.agendamento.produtos.filter(pagamento_status="reservado")
+        for ap in produtos_agendamento:
+            ap.marcar_como_pago()
+
+    def marcar_apenas_servico_pago(self):
+        """
+        Se apenas o serviço foi pago e não os produtos,
+        devolve os produtos para o estoque (cancela reserva)
+        """
+        produtos_agendamento = self.agendamento.produtos.filter(pagamento_status="reservado")
+        for ap in produtos_agendamento:
+            ap.desfazer_reserva()
 
     @classmethod
     def sync_for_agendamento(cls, agendamento):
@@ -373,3 +402,118 @@ class Pagamento(models.Model):
 
     def __str__(self):
         return f"Pagamento {self.referencia_pagamento} - {self.get_status_display()}"
+
+
+class AgendamentoProduto(models.Model):
+    """
+    Modelo intermediário entre Agendamento e Produto para gerenciar:
+    - Produtos adicionados ao agendamento
+    - Quantidade de cada produto
+    - Status de pagamento (reservado, pago ou cancelado)
+    - Histórico de preço (em caso de alteração no catálogo)
+    """
+    PAGAMENTO_STATUS_CHOICES = [
+        ("reservado", "Reservado"),
+        ("pago", "Pago"),
+        ("cancelado", "Cancelado"),
+    ]
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    agendamento = models.ForeignKey(
+        Agendamento,
+        on_delete=models.CASCADE,
+        related_name="produtos",
+    )
+    produto = models.ForeignKey(
+        "produtos.Produto",
+        on_delete=models.CASCADE,
+        related_name="agendamentos",
+    )
+    quantidade = models.PositiveIntegerField(default=1)
+    preco_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    pagamento_status = models.CharField(
+        max_length=20,
+        choices=PAGAMENTO_STATUS_CHOICES,
+        default="reservado",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("agendamento", "produto")
+        ordering = ["criado_em"]
+
+    def clean(self):
+        errors = {}
+
+        if self.empresa_id:
+            if self.agendamento_id and self.agendamento.empresa_id != self.empresa_id:
+                errors["agendamento"] = "O agendamento não pertence a esta empresa."
+
+            if self.produto_id and self.produto.empresa_id != self.empresa_id:
+                errors["produto"] = "O produto não pertence a esta empresa."
+
+        if self.quantidade is not None and self.quantidade <= 0:
+            errors["quantidade"] = "A quantidade deve ser maior que zero."
+
+        if self.preco_unitario is not None and self.preco_unitario < 0:
+            errors["preco_unitario"] = "O preço não pode ser negativo."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self.preco_unitario:
+            self.preco_unitario = self.produto.preco
+        self.clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def preco_total(self):
+        """Calcula o preço total do item (quantidade × preço unitário)"""
+        return self.quantidade * self.preco_unitario
+
+    def marcar_como_pago(self):
+        """Marca o produto como pago e deduz do estoque"""
+        self.pagamento_status = "pago"
+        self.save()
+
+        # Deduz do estoque
+        self.produto.estoque -= self.quantidade
+        self.produto.estoque_reservado -= self.quantidade
+        self.produto.save()
+
+    def desfazer_reserva(self):
+        """Remove a reserva e devolve ao estoque disponível"""
+        self.pagamento_status = "cancelado"
+        self.save()
+
+        # Devolve ao estoque
+        self.produto.estoque_reservado -= self.quantidade
+        self.produto.save()
+
+    def __str__(self):
+        return f"{self.agendamento} - {self.produto.nome} ({self.quantidade}x)"
+
+
+class NotificacaoProfissional(models.Model):
+    profissional = models.ForeignKey(
+        Profissional,
+        on_delete=models.CASCADE,
+        related_name="notificacoes",
+    )
+    agendamento = models.ForeignKey(
+        Agendamento,
+        on_delete=models.CASCADE,
+        related_name="notificacoes_profissional",
+    )
+    titulo = models.CharField(max_length=120)
+    mensagem = models.TextField()
+    lida = models.BooleanField(default=False)
+    criada_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criada_em"]
+
+    def __str__(self):
+        return f"{self.profissional.nome}: {self.titulo}"

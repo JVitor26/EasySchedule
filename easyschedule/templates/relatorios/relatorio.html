@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="{% static 'css/pages.css' %}">
 <link rel="stylesheet" href="{% static 'css/relatorio.css' %}">
 
-<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}">
+<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}" data-visible-kpis="{{ selected_report_cards|join:',' }}">
   <div class="report-shell">
     <header class="report-header">
       <div class="report-heading">
@@ -52,29 +52,89 @@
       </div>
     </section>
 
+    <section class="report-card report-settings-card">
+      <div class="report-card-header">
+        <div>
+          <h2>Configuração do dashboard de relatórios</h2>
+          <p>Escolha quais KPIs você quer visualizar neste painel analítico.</p>
+        </div>
+      </div>
+
+      <form method="post" class="report-settings-grid">
+        {% csrf_token %}
+        <div class="report-settings-column">
+          <h3>Cards da esquerda</h3>
+          {% for card in cards_by_group.left %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="report-settings-column">
+          <h3>Cards da direita</h3>
+          {% for card in cards_by_group.right %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="report-settings-actions">
+          <button type="submit" class="btn-success">Salvar configuração</button>
+        </div>
+      </form>
+    </section>
+
     <section class="report-metrics">
-      <article class="report-card metric-card">
+      <article class="report-card metric-card metric-kpi" data-kpi-key="faturamento">
         <span class="metric-label">Faturamento</span>
         <strong class="metric-value" id="faturamento">R$ 0,00</strong>
         <small class="metric-note" id="faturamentoAux">0 atendimentos finalizados</small>
       </article>
 
-      <article class="report-card metric-card">
+      <article class="report-card metric-card metric-kpi" data-kpi-key="agendamentos">
         <span class="metric-label">Agendamentos</span>
         <strong class="metric-value" id="agendamentos">0</strong>
         <small class="metric-note" id="agendamentosAux">0 registros no período</small>
       </article>
 
-      <article class="report-card metric-card">
+      <article class="report-card metric-card metric-kpi" data-kpi-key="cancelamentos">
         <span class="metric-label">Cancelamentos</span>
         <strong class="metric-value" id="cancelamentos">0%</strong>
         <small class="metric-note" id="cancelamentosAux">0 cancelamentos no período</small>
       </article>
 
-      <article class="report-card metric-card">
+      <article class="report-card metric-card metric-kpi" data-kpi-key="ticket">
         <span class="metric-label">Ticket médio</span>
         <strong class="metric-value" id="ticket">R$ 0,00</strong>
         <small class="metric-note" id="ticketAux">Média por atendimento finalizado</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_agendamentos">
+        <span class="metric-label">Previsão de agendamentos</span>
+        <strong class="metric-value" id="previsaoAgendamentos">0</strong>
+        <small class="metric-note" id="previsaoAgendamentosAux">Sem previsão no período futuro</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_receita">
+        <span class="metric-label">Previsão de receita</span>
+        <strong class="metric-value" id="previsaoReceita">R$ 0,00</strong>
+        <small class="metric-note" id="previsaoReceitaAux">Inclui agendamentos previstos e planos pendentes</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="planos_pendentes">
+        <span class="metric-label">Planos pendentes</span>
+        <strong class="metric-value" id="planosPendentes">R$ 0,00</strong>
+        <small class="metric-note" id="planosPendentesAux">Total previsto de planos contratados ainda sem pagamento</small>
       </article>
     </section>
 
@@ -158,6 +218,32 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de agendamentos</h2>
+            <p>Tendência de volume futuro baseada nos atendimentos já marcados.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper">
+          <canvas id="graficoPrevisaoAgendamentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de valor</h2>
+            <p>Composição entre agendamentos previstos e planos pendentes.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoPrevisaoReceita"></canvas>
         </div>
       </article>
     </section>

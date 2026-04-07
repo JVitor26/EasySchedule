@@ -65,6 +65,45 @@ document.addEventListener("DOMContentLoaded", () => {
         return urlTemplate.replace("999999", String(id));
     }
 
+    function isMobileViewport() {
+        return window.matchMedia("(max-width: 768px)").matches;
+    }
+
+    function mobileCalendarView() {
+        return window.matchMedia("(max-width: 480px)").matches ? "listWeek" : "timeGridDay";
+    }
+
+    function getHeaderToolbar() {
+        if (isMobileViewport()) {
+            return {
+                left: "prev,next",
+                center: "title",
+                right: "today",
+            };
+        }
+
+        return {
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
+        };
+    }
+
+    function applyResponsiveCalendarLayout(calendar) {
+        const mobile = isMobileViewport();
+        calendar.setOption("headerToolbar", getHeaderToolbar());
+        calendar.setOption("eventMaxStack", mobile ? 2 : 5);
+        calendar.setOption("dayMaxEventRows", mobile ? 3 : true);
+
+        const currentView = calendar.view.type;
+        if (mobile && currentView === "timeGridWeek") {
+            calendar.changeView(mobileCalendarView());
+        }
+        if (!mobile && (currentView === "timeGridDay" || currentView === "listWeek")) {
+            calendar.changeView("timeGridWeek");
+        }
+    }
+
     function fillModal(event) {
         const props = event.extendedProps || {};
 
@@ -89,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const calendar = new FullCalendar.Calendar(elements.calendar, {
-        initialView: "timeGridWeek",
+        initialView: isMobileViewport() ? mobileCalendarView() : "timeGridWeek",
         locale: "pt-br",
         editable: true,
         nowIndicator: true,
@@ -97,11 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
         slotMinTime: "06:00:00",
         slotMaxTime: "22:00:00",
         allDaySlot: false,
-        headerToolbar: {
-            left: "prev,next today",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
-        },
+        headerToolbar: getHeaderToolbar(),
         buttonText: {
             today: "Hoje",
             month: "Mes",
@@ -188,6 +223,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     calendar.render();
+    applyResponsiveCalendarLayout(calendar);
+
+    let lastWasMobile = isMobileViewport();
+    window.addEventListener("resize", () => {
+        const currentMobile = isMobileViewport();
+        if (currentMobile !== lastWasMobile) {
+            applyResponsiveCalendarLayout(calendar);
+            lastWasMobile = currentMobile;
+        }
+    });
 
     [elements.filtroProfissional, elements.filtroStatus].forEach((field) => {
         field.addEventListener("change", () => {

@@ -106,6 +106,35 @@
       </div>
 
       <div class="auth-fields">
+        <label for="id_whatsapp">WhatsApp da empresa</label>
+        {{ form.whatsapp }}
+        {{ form.whatsapp.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <p style="color: var(--text-2); margin: 0 0 1rem 0; font-size: 0.9rem;">
+          <strong style="display: block; margin-bottom: 0.75rem;">Escolha o plano para começar:</strong>
+        </p>
+        <div id="plano-selector" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <!-- Preenchido pelo JS -->
+        </div>
+      </div>
+
+      <!-- Hidden Django field for backend -->
+      <div style="display: none;">
+        {{ form.plano }}
+      </div>
+
+      <div class="auth-fields" id="limiteProfissionaisField" style="display: none;">
+        <label for="id_limite_profissionais">Quantidade de funcionarios no plano</label>
+        {{ form.limite_profissionais }}
+        {% if form.limite_profissionais.help_text %}
+        <small class="form-help">{{ form.limite_profissionais.help_text }}</small>
+        {% endif %}
+        {{ form.limite_profissionais.errors }}
+      </div>
+
+      <div class="auth-fields">
         <label for="id_email">E-mail</label>
         {{ form.email }}
         {{ form.email.errors }}

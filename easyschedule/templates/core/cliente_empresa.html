@@ -106,6 +106,9 @@
           <h2>Produtos da empresa</h2>
           <p>Confira alguns itens disponiveis para venda pela empresa no mesmo portal.</p>
         </div>
+        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+          🏪 Ir para loja completa
+        </a>
       </div>
 
       <div class="client-product-grid">
@@ -135,6 +138,37 @@
       </div>
     </section>
 
+    <!-- Carrinho de compras -->
+    <section class="client-panel" id="carrinho-section" style="display: none;">
+      <div class="client-panel-header">
+        <div>
+          <h2>🛒 Produtos no carrinho</h2>
+          <p>Itens que serão adicionados ao seu agendamento</p>
+        </div>
+      </div>
+
+      <div id="carrinho-items" style="display: none;">
+        <table style="width: 100%; max-width: 600px;">
+          <tbody id="carrinho-lista"></tbody>
+        </table>
+        <p style="margin-top: 1rem;">
+          <strong>Total de produtos:</strong> R$ <span id="carrinho-total">0.00</span>
+        </p>
+        <div style="margin-top: 1rem;">
+          <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block;">
+            Adicionar mais produtos
+          </a>
+          <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.5rem 1rem; background: #ef4444;">
+            Limpar carrinho
+          </button>
+        </div>
+      </div>
+
+      <p id="carrinho-vazio" style="color: var(--text-2); text-align: center; padding: 1rem;">
+        Nenhum produto no carrinho. <a href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: underline;">Ir para loja</a>
+      </p>
+    </section>
+
     <section class="client-booking-card">
       <div class="client-panel-header">
         <div>
@@ -143,7 +177,7 @@
         </div>
       </div>
 
-      <form method="post" class="client-booking-form" novalidate>
+      <form id="bookingForm" method="post" class="client-booking-form" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
         <div class="client-form-errors">{{ form.non_field_errors }}</div>
@@ -240,8 +274,406 @@
         </div>
       </form>
     </section>
+
+    <section class="client-panel">
+      <div class="client-panel-header">
+        <div>
+          <h2>Meus agendamentos</h2>
+          <p>Entre com senha ou codigo rapido, acompanhe, cancele ou remarque seus horarios.</p>
+        </div>
+      </div>
+
+      <form id="portalPasswordForm" class="client-booking-form" novalidate>
+        <div class="client-form-grid">
+          <div class="client-form-group">
+            <label for="portalIdentifier">Email ou WhatsApp</label>
+            <input id="portalIdentifier" name="identifier" type="text" placeholder="cliente@email.com ou (65) 99999-9999">
+          </div>
+          <div class="client-form-group">
+            <label for="portalPassword">Senha do portal</label>
+            <input id="portalPassword" name="password" type="password" placeholder="Sua senha do portal">
+          </div>
+          <div class="client-form-actions">
+            <button type="submit" class="btn-success">Entrar com senha</button>
+          </div>
+        </div>
+        <div class="auth-footer" style="justify-content: flex-end; margin-top: 0;">
+          <a href="{% url 'password_recovery_request' %}?tipo=cliente&empresa={{ empresa.id }}">Esqueci minha senha</a>
+        </div>
+      </form>
+
+      <p class="slots-feedback">Se ainda nao tiver senha, entre com codigo rapido abaixo e depois crie a senha em Minha Conta.</p>
+
+      <form id="otpStartForm" class="client-booking-form" novalidate>
+        <div class="client-form-grid">
+          <div class="client-form-group">
+            <label for="otpTelefone">Telefone</label>
+            <input id="otpTelefone" name="telefone" type="text" placeholder="(65) 99999-9999">
+          </div>
+          <div class="client-form-group">
+            <label for="otpEmail">Email (opcional)</label>
+            <input id="otpEmail" name="email" type="email" placeholder="cliente@email.com">
+          </div>
+          <div class="client-form-group">
+            <label for="otpCanal">Canal do codigo</label>
+            <select id="otpCanal" name="canal">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="email">Email</option>
+            </select>
+          </div>
+          <div class="client-form-actions">
+            <button type="submit" class="btn-success">Enviar codigo</button>
+          </div>
+        </div>
+      </form>
+
+      <form id="otpValidateForm" class="client-booking-form" novalidate style="display:none;">
+        <div class="client-form-grid">
+          <div class="client-form-group">
+            <label for="otpCodigo">Codigo OTP</label>
+            <input id="otpCodigo" name="codigo" type="text" maxlength="6" placeholder="000000" required>
+          </div>
+          <div class="client-form-actions">
+            <button type="submit" class="btn-success">Entrar no portal</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="portalActions" class="client-success-actions" style="display:none;">
+        <a class="btn-success" href="{% url 'cliente_minha_conta' empresa.id %}">Minha Conta</a>
+        <button type="button" id="portalLogoutBtn" class="btn-secondary">Sair do portal</button>
+      </div>
+
+      <p id="trackFeedback" class="slots-feedback">Entre no portal para consultar sem digitar telefone toda vez.</p>
+      <div id="trackResults" class="client-mini-list" style="display: none;"></div>
+    </section>
   </div>
 </section>
 
 <script src="{% static 'js/client_portal.js' %}"></script>
+
+<script>
+const empresa_id = {{ empresa.id }};
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                  document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+
+// Carregar carrinho ao abrir a página
+function carregarCarrinho() {
+  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+    .then(r => r.json())
+    .then(data => {
+      const carrinhoSection = document.getElementById('carrinho-section');
+      const carrinhoItems = document.getElementById('carrinho-items');
+      const carrinhoLista = document.getElementById('carrinho-lista');
+      const carrinhoVazio = document.getElementById('carrinho-vazio');
+      const carrinhoTotal = document.getElementById('carrinho-total');
+      
+      if (data.total_itens > 0) {
+        carrinhoItems.style.display = 'block';
+        carrinhoVazio.style.display = 'none';
+        carrinhoSection.style.display = 'block';
+        
+        carrinhoLista.innerHTML = data.itens.map(item => `
+          <tr style="border-bottom: 1px solid var(--border-soft);">
+            <td style="padding: 0.75rem; text-align: left;">
+              ${item.nome} <br/>
+              <small style="color: var(--text-2);">${item.quantidade}x R$ ${parseFloat(item.preco).toFixed(2)}</small>
+            </td>
+            <td style="padding: 0.75rem; text-align: right; width: 120px;">
+              R$ ${parseFloat(item.preco_total).toFixed(2)}
+            </td>
+          </tr>
+        `).join('');
+        
+        carrinhoTotal.textContent = parseFloat(data.total_preco).toFixed(2);
+      } else {
+        carrinhoSection.style.display = 'none';
+        carrinhoItems.style.display = 'none';
+        carrinhoVazio.style.display = 'block';
+      }
+    })
+    .catch(err => console.error('Erro ao carregar carrinho:', err));
+}
+
+// Limpar carrinho
+window.limparCarrinho = function() {
+  if (confirm('Tem certeza que deseja limpar o carrinho?')) {
+    fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+      .then(r => r.json())
+      .then(data => {
+        let promises = data.itens.map(item =>
+          fetch(`/cliente/empresa/${empresa_id}/api/carrinho/remover/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrftoken,
+            },
+            body: JSON.stringify({ produto_id: item.produto_id }),
+          })
+        );
+        return Promise.all(promises);
+      })
+      .then(() => carregarCarrinho());
+  }
+};
+
+// Integrar produtos do carrinho ao formulário
+function adicionarProdutosAoFormulario() {
+  const form = document.querySelector('.client-booking-form');
+  if (!form) return;
+  
+  // Adicionar campo hidden para produtos
+  let produtosInput = form.querySelector('input[name="produtos_json"]');
+  if (!produtosInput) {
+    produtosInput = document.createElement('input');
+    produtosInput.type = 'hidden';
+    produtosInput.name = 'produtos_json';
+    form.appendChild(produtosInput);
+  }
+  
+  // Atualizar com dados do carrinho
+  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.total_itens > 0) {
+        produtosInput.value = JSON.stringify(data.itens);
+      }
+    });
+}
+
+// Executar ao enviar formulário
+document.getElementById('bookingForm')?.addEventListener('submit', adicionarProdutosAoFormulario);
+
+// Carregar carrinho ao abrir página
+carregarCarrinho();
+
+// Portal do cliente: consultar meus agendamentos
+const portalPasswordForm = document.getElementById('portalPasswordForm');
+const otpStartForm = document.getElementById('otpStartForm');
+const otpValidateForm = document.getElementById('otpValidateForm');
+const trackFeedback = document.getElementById('trackFeedback');
+const trackResults = document.getElementById('trackResults');
+const portalActions = document.getElementById('portalActions');
+const portalLogoutBtn = document.getElementById('portalLogoutBtn');
+let currentOtpId = null;
+
+function setTrackFeedback(message, state = '') {
+  trackFeedback.textContent = message;
+  trackFeedback.classList.remove('is-error', 'is-success', 'is-loading');
+  if (state) {
+    trackFeedback.classList.add(state);
+  }
+}
+
+function renderAgendamentos(ags) {
+  trackResults.innerHTML = ags.map((ag) => `
+    <article class="mini-item">
+      <strong>${ag.data} as ${ag.hora} • ${ag.servico}</strong>
+      <span>Profissional: ${ag.profissional}</span>
+      <small>Status: ${ag.status} • Pagamento: ${ag.pagamento_status}</small>
+      <small>Valor: R$ ${parseFloat(ag.valor).toFixed(2)} • ${ag.tipo}</small>
+      ${ag.pagamento_url ? `<a class="back-link" href="${ag.pagamento_url}" style="margin-top:0.4rem;">Pagar este agendamento</a>` : ''}
+      ${ag.can_change ? `
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
+          <button type="button" class="btn-secondary" onclick="cancelarAgendamento(${ag.id})">Cancelar</button>
+          <button type="button" class="btn-success" onclick="remarcarAgendamento(${ag.id}, '${ag.agendamento_iso_date}', '${ag.agendamento_hour}')">Remarcar</button>
+        </div>
+      ` : ''}
+    </article>
+  `).join('');
+  trackResults.style.display = 'flex';
+}
+
+async function carregarMeusAgendamentos() {
+  setTrackFeedback('Consultando seus agendamentos...', 'is-loading');
+  trackResults.style.display = 'none';
+  trackResults.innerHTML = '';
+
+  const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrftoken,
+    },
+    body: JSON.stringify({}),
+  });
+  const data = await response.json();
+  if (!response.ok || data.status !== 'sucesso') {
+    throw new Error(data.message || 'Nao foi possivel consultar agora.');
+  }
+
+  const ags = data.agendamentos || [];
+  if (!ags.length) {
+    setTrackFeedback('Nenhum agendamento encontrado para este cadastro.');
+    return;
+  }
+
+  setTrackFeedback(`${ags.length} agendamento(s) encontrado(s).`, 'is-success');
+  renderAgendamentos(ags);
+}
+
+portalPasswordForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const identifier = document.getElementById('portalIdentifier').value;
+  const password = document.getElementById('portalPassword').value;
+
+  setTrackFeedback('Validando sua senha do portal...', 'is-loading');
+
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/login-senha/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({ identifier, password }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Nao foi possivel entrar no portal.');
+    }
+
+    portalActions.style.display = 'flex';
+    otpValidateForm.style.display = 'none';
+    await carregarMeusAgendamentos();
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+});
+
+window.cancelarAgendamento = async function(agendamentoId) {
+  if (!confirm('Deseja realmente cancelar este agendamento?')) return;
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/${agendamentoId}/cancelar/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Falha ao cancelar.');
+    }
+    await carregarMeusAgendamentos();
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+};
+
+window.remarcarAgendamento = async function(agendamentoId, dataAtual, horaAtual) {
+  const novaData = prompt('Nova data (AAAA-MM-DD):', dataAtual);
+  if (!novaData) return;
+  const novaHora = prompt('Novo horario (HH:MM):', horaAtual);
+  if (!novaHora) return;
+
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/${agendamentoId}/remarcar/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({ data: novaData, hora: novaHora }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Falha ao remarcar.');
+    }
+    await carregarMeusAgendamentos();
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+};
+
+otpStartForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const telefone = document.getElementById('otpTelefone').value;
+  const email = document.getElementById('otpEmail').value;
+  const canal = document.getElementById('otpCanal').value;
+
+  setTrackFeedback('Enviando codigo de acesso...', 'is-loading');
+
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/enviar-otp/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({ telefone, email, canal }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Nao foi possivel consultar agora.');
+    }
+
+    currentOtpId = data.otp_id;
+    otpValidateForm.style.display = 'block';
+    setTrackFeedback(`Codigo enviado via ${data.canal}. Confira seu ${data.canal}.`, 'is-success');
+    if (data.dev_code) {
+      setTrackFeedback(`Codigo enviado. (DEV: ${data.dev_code})`, 'is-success');
+    }
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+});
+
+otpValidateForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const codigo = document.getElementById('otpCodigo').value;
+  if (!currentOtpId) {
+    setTrackFeedback('Solicite primeiro um codigo de acesso.', 'is-error');
+    return;
+  }
+
+  setTrackFeedback('Validando codigo...', 'is-loading');
+
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/validar-otp/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({ otp_id: currentOtpId, codigo }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Codigo invalido.');
+    }
+
+    portalActions.style.display = 'flex';
+    await carregarMeusAgendamentos();
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+});
+
+portalLogoutBtn?.addEventListener('click', async () => {
+  await fetch(`/cliente/empresa/${empresa_id}/api/portal/logout/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrftoken,
+    },
+    body: JSON.stringify({}),
+  });
+  portalActions.style.display = 'none';
+  otpValidateForm.style.display = 'none';
+  trackResults.style.display = 'none';
+  portalPasswordForm?.reset();
+  setTrackFeedback('Sessao do portal encerrada.');
+});
+
+{% if cliente_portal_autenticado %}
+portalActions.style.display = 'flex';
+carregarMeusAgendamentos().catch((error) => setTrackFeedback(error.message, 'is-error'));
+{% endif %}
+</script>
 {% endblock %}
+

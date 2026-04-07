@@ -330,6 +330,54 @@
     background: var(--danger);
 }
 
+.dashboard-settings {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr 1fr;
+}
+
+.dashboard-settings-column {
+    display: grid;
+    gap: 1rem;
+}
+
+.dashboard-settings-card {
+    display: block;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dashboard-settings-card:hover {
+    border-color: var(--accent);
+}
+
+.dashboard-settings-card input {
+    margin-right: 0.75rem;
+}
+
+.dashboard-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-settings-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.dashboard-settings-note {
+    margin-top: 0.5rem;
+    color: var(--text-2);
+    font-size: 0.95rem;
+}
+
 #calendar {
     width: 100%;
     min-height: 46rem;
@@ -552,8 +600,20 @@
 @media (max-width: 720px) {
     .agenda-card,
     .agenda-modal-box {
-        padding: 1.2rem;
-        border-radius: 1.45rem;
+        padding: 1rem;
+        border-radius: 1.15rem;
+    }
+
+    .agenda-copy h1 {
+        margin-bottom: 0.55rem;
+        font-size: clamp(1.9rem, 8.6vw, 2.5rem);
+        line-height: 1;
+    }
+
+    .agenda-subtitle {
+        font-size: 0.92rem;
+        line-height: 1.6;
+        max-width: 34rem;
     }
 
     .agenda-metrics,
@@ -567,6 +627,35 @@
     .today-item {
         grid-template-columns: 1fr;
         align-items: flex-start;
+        gap: 0.55rem;
+        padding: 0.8rem 0;
+    }
+
+    .today-time {
+        min-width: auto;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.82rem;
+    }
+
+    .metric-value {
+        margin-top: 0.6rem;
+        font-size: clamp(1.45rem, 7vw, 1.9rem);
+    }
+
+    .metric-note,
+    .summary-item span,
+    .agenda-card-header p {
+        font-size: 0.84rem;
+        line-height: 1.45;
+    }
+
+    .summary-item {
+        padding: 0.75rem;
+        border-radius: 0.9rem;
+    }
+
+    .summary-item strong {
+        font-size: 1.35rem;
     }
 
     .agenda-hero-actions,
@@ -584,6 +673,39 @@
     }
 
     #calendar {
-        min-height: 38rem;
+        min-height: 32rem;
+        font-size: 0.82rem;
+    }
+
+    .fc-toolbar-title {
+        font-size: 1.15rem !important;
+    }
+
+    .fc .fc-button-primary {
+        padding: 0.58rem 0.78rem !important;
+        font-size: 0.82rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .agenda-card,
+    .agenda-modal-box {
+        padding: 0.9rem;
+        border-radius: 1rem;
+    }
+
+    .metric-label,
+    .modal-label {
+        letter-spacing: 0.1em;
+    }
+
+    .metric-note {
+        display: none;
+    }
+
+    .today-content p,
+    .today-content small {
+        font-size: 0.85rem;
+    }
     }
 }

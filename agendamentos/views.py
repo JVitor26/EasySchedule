@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from .models import Agendamento, Pagamento, PlanoMensal
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta
 import json
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
+from empresas.permissions import is_profissional_user
 
 
 @login_required
@@ -26,11 +28,17 @@ def agendamentos_list(request):
         'pagamento',
         'plano',
     )
+    if is_profissional_user(request.user):
+        agendamentos = agendamentos.filter(profissional=request.user.profissional_profile)
     return render(request, 'agendamentos/agendamentos_list.html', {'agendamentos': agendamentos})
 
 
 @login_required
 def agendamentos_form(request, pk=None):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para visualizar a agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -69,6 +77,10 @@ def agendamentos_form(request, pk=None):
 
 @login_required
 def planos_list(request):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para visualizar a agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -84,6 +96,10 @@ def planos_list(request):
 
 @login_required
 def planos_form(request, pk=None):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para visualizar a agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -120,6 +136,10 @@ def planos_form(request, pk=None):
 
 @login_required
 def planos_delete(request, pk):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para visualizar a agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -136,6 +156,10 @@ def planos_delete(request, pk):
 
 @login_required
 def agendamentos_delete(request, pk):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para visualizar a agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -166,6 +190,9 @@ def agendamentos_api(request):
         'cliente', 'servico', 'profissional'
     ).order_by('data', 'hora')
 
+    if is_profissional_user(request.user):
+        queryset = queryset.filter(profissional=request.user.profissional_profile)
+
     if profissional_id:
         queryset = queryset.filter(profissional_id=profissional_id)
 
@@ -184,6 +211,13 @@ def agendamentos_api(request):
         if end_date:
             queryset = queryset.filter(data__lt=end_date)
 
+    status_colors = {
+        'pendente': '#f59e0b',
+        'confirmado': '#22c55e',
+        'finalizado': '#38bdf8',
+        'cancelado': '#ef4444',
+    }
+
     for ag in queryset:
         inicio = datetime.combine(ag.data, ag.hora)
         termino = inicio + timedelta(minutes=ag.servico.tempo or 0)
@@ -192,7 +226,7 @@ def agendamentos_api(request):
             'title': f'{ag.cliente.nome} - {ag.servico.nome}',
             'start': inicio.isoformat(),
             'end': termino.isoformat(),
-            'color': ag.servico.cor or '#22c55e',
+            'color': status_colors.get(ag.status, ag.servico.cor or '#22c55e'),
             'extendedProps': {
                 'cliente': ag.cliente.nome,
                 'servico': ag.servico.nome,
@@ -218,6 +252,9 @@ def mover_agendamento(request, pk):
         return JsonResponse({'status': 'erro', 'mensagem': 'Empresa não selecionada.'}, status=400)
 
     agendamento = get_object_or_404(Agendamento, pk=pk, empresa=empresa)
+
+    if is_profissional_user(request.user) and agendamento.profissional_id != request.user.profissional_profile.id:
+        return JsonResponse({'status': 'erro', 'mensagem': 'Voce nao pode alterar agendamentos de outro profissional.'}, status=403)
 
     if agendamento.plano_id:
         return JsonResponse({

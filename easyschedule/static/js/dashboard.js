@@ -1,6 +1,8 @@
 let graficoAgendamentos = null;
 let graficoProfissionais = null;
 let graficoServicos = null;
+let graficoPrevisaoAgendamentos = null;
+let graficoPrevisaoReceita = null;
 let dashboardPayload = null;
 
 const moneyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -51,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const elements = {
         dashboardUrl: reportPage.dataset.dashboardUrl,
+        visibleKpis: new Set((reportPage.dataset.visibleKpis || "").split(",").filter(Boolean)),
         dataInicio: document.getElementById("data_inicio"),
         dataFim: document.getElementById("data_fim"),
         feedback: document.getElementById("reportFeedback"),
@@ -66,11 +69,19 @@ document.addEventListener("DOMContentLoaded", () => {
         cancelamentosAux: document.getElementById("cancelamentosAux"),
         ticket: document.getElementById("ticket"),
         ticketAux: document.getElementById("ticketAux"),
+        previsaoAgendamentos: document.getElementById("previsaoAgendamentos"),
+        previsaoAgendamentosAux: document.getElementById("previsaoAgendamentosAux"),
+        previsaoReceita: document.getElementById("previsaoReceita"),
+        previsaoReceitaAux: document.getElementById("previsaoReceitaAux"),
+        planosPendentes: document.getElementById("planosPendentes"),
+        planosPendentesAux: document.getElementById("planosPendentesAux"),
         tabelaProfissionais: document.getElementById("tabelaProfissionais"),
         tabelaServicos: document.getElementById("tabelaServicos"),
         graficoAgendamentos: document.getElementById("graficoAgendamentos"),
         graficoProfissionais: document.getElementById("graficoProfissionais"),
         graficoServicos: document.getElementById("graficoServicos"),
+        graficoPrevisaoAgendamentos: document.getElementById("graficoPrevisaoAgendamentos"),
+        graficoPrevisaoReceita: document.getElementById("graficoPrevisaoReceita"),
     };
 
     const trackedFields = [elements.dataInicio, elements.dataFim].filter(Boolean);
@@ -140,6 +151,21 @@ document.addEventListener("DOMContentLoaded", () => {
             chart.destroy();
         }
         return null;
+    }
+
+    function applyKpiVisibility() {
+        const cards = document.querySelectorAll(".metric-kpi[data-kpi-key]");
+        if (!elements.visibleKpis.size) {
+            cards.forEach((card) => {
+                card.hidden = false;
+            });
+            return;
+        }
+
+        cards.forEach((card) => {
+            const key = card.dataset.kpiKey;
+            card.hidden = !elements.visibleKpis.has(key);
+        });
     }
 
     function commonScale(axis) {
@@ -305,6 +331,99 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function createForecastAppointmentsChart(labels, values) {
+        const palette = getThemePalette();
+        graficoPrevisaoAgendamentos = destroyChart(graficoPrevisaoAgendamentos);
+        graficoPrevisaoAgendamentos = new Chart(elements.graficoPrevisaoAgendamentos, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [{
+                    label: "Previsão de agendamentos",
+                    data: values,
+                    borderColor: palette.info,
+                    backgroundColor: palette.accentSoft,
+                    fill: true,
+                    borderWidth: 3,
+                    tension: 0.32,
+                    pointRadius: 3,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: palette.textSecondary,
+                        },
+                    },
+                },
+                scales: {
+                    x: commonScale("x"),
+                    y: {
+                        ...commonScale("y"),
+                        beginAtZero: true,
+                        ticks: {
+                            color: palette.textMuted,
+                            precision: 0,
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function createForecastRevenueChart(summary) {
+        const palette = getThemePalette();
+        graficoPrevisaoReceita = destroyChart(graficoPrevisaoReceita);
+        graficoPrevisaoReceita = new Chart(elements.graficoPrevisaoReceita, {
+            type: "bar",
+            data: {
+                labels: ["Agendamentos previstos", "Planos pendentes", "Total previsto"],
+                datasets: [{
+                    label: "Valor (R$)",
+                    data: [
+                        Number(summary.totalAgendamentosPrevistos) || 0,
+                        Number(summary.totalPlanosPendentes) || 0,
+                        Number(summary.totalPrevisto) || 0,
+                    ],
+                    borderRadius: 12,
+                    backgroundColor: [palette.accent2, palette.warning, palette.success],
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label(context) {
+                                return formatCurrency(context.raw);
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: commonScale("x"),
+                    y: {
+                        ...commonScale("y"),
+                        beginAtZero: true,
+                        ticks: {
+                            color: palette.textMuted,
+                            callback(value) {
+                                return formatCurrency(value);
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
     function renderDashboard(payload) {
         if (!payload) {
             return;
@@ -317,6 +436,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const totalCancelados = Number(payload.cancelamentos?.cancelados) || 0;
         const taxaCancelamento = Number(payload.cancelamentos?.taxa_cancelamento) || 0;
         const ticketMedio = totalFinalizados > 0 ? faturamentoTotal / totalFinalizados : 0;
+        const previsaoAgendamentos = Array.isArray(payload.previsao_agendamentos) ? payload.previsao_agendamentos : [];
+        const previsaoReceita = payload.previsao_receita || {};
+        const totalPrevisaoAgendamentos = previsaoAgendamentos.reduce(
+            (total, item) => total + (Number(item.total) || 0),
+            0
+        );
+        const totalAgendamentosPrevistosValor = Number(previsaoReceita.total_agendamentos_previstos) || 0;
+        const totalPlanosPendentes = Number(previsaoReceita.total_planos_pendentes) || 0;
+        const totalPrevisto = Number(previsaoReceita.total_previsto) || 0;
 
         elements.faturamento.textContent = formatCurrency(faturamentoTotal);
         elements.faturamentoAux.textContent = pluralize(
@@ -344,6 +472,23 @@ document.addEventListener("DOMContentLoaded", () => {
             ? "Média por atendimento finalizado"
             : "Sem atendimentos finalizados no período";
 
+        elements.previsaoAgendamentos.textContent = formatNumber(totalPrevisaoAgendamentos);
+        elements.previsaoAgendamentosAux.textContent = pluralize(
+            totalPrevisaoAgendamentos,
+            "agendamento previsto",
+            "agendamentos previstos"
+        );
+
+        elements.previsaoReceita.textContent = formatCurrency(totalPrevisto);
+        elements.previsaoReceitaAux.textContent =
+            `${formatCurrency(totalAgendamentosPrevistosValor)} em agenda + ${formatCurrency(totalPlanosPendentes)} em planos pendentes`;
+
+        elements.planosPendentes.textContent = formatCurrency(totalPlanosPendentes);
+        elements.planosPendentesAux.textContent =
+            totalPlanosPendentes > 0
+                ? "Existe previsão de receita ainda não paga em planos"
+                : "Nenhum plano pendente de pagamento no período";
+
         const agendamentos = Array.isArray(payload.agendamentos) ? payload.agendamentos : [];
         const profissionais = Array.isArray(payload.profissionais) ? payload.profissionais : [];
         const servicos = Array.isArray(payload.servicos) ? payload.servicos : [];
@@ -362,6 +507,17 @@ document.addEventListener("DOMContentLoaded", () => {
             servicos.map((item) => item.servico__nome || "Sem nome"),
             servicos.map((item) => Number(item.total) || 0)
         );
+
+        createForecastAppointmentsChart(
+            previsaoAgendamentos.map((item) => formatDateLabel(item.data)),
+            previsaoAgendamentos.map((item) => Number(item.total) || 0)
+        );
+
+        createForecastRevenueChart({
+            totalAgendamentosPrevistos: totalAgendamentosPrevistosValor,
+            totalPlanosPendentes,
+            totalPrevisto,
+        });
 
         renderProfessionalsTable(profissionais);
         renderServicesTable(servicos);
@@ -462,6 +618,8 @@ document.addEventListener("DOMContentLoaded", () => {
             graficoAgendamentos = destroyChart(graficoAgendamentos);
             graficoProfissionais = destroyChart(graficoProfissionais);
             graficoServicos = destroyChart(graficoServicos);
+            graficoPrevisaoAgendamentos = destroyChart(graficoPrevisaoAgendamentos);
+            graficoPrevisaoReceita = destroyChart(graficoPrevisaoReceita);
 
             renderEmptyRow(elements.tabelaProfissionais, 3, "Não foi possível carregar os dados.");
             renderEmptyRow(elements.tabelaServicos, 3, "Não foi possível carregar os dados.");
@@ -493,5 +651,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    applyKpiVisibility();
     carregarDashboard();
 });

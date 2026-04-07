@@ -22,6 +22,15 @@
       <div class="form-errors">{{ form.non_field_errors }}</div>
       {% endif %}
       <div class="form-grid">
+        <div class="form-group full">
+          <label>{{ form.usuario.label }}</label>
+          {{ form.usuario }}
+          {% if form.usuario.help_text %}
+          <small class="form-help">{{ form.usuario.help_text }}</small>
+          {% endif %}
+          {{ form.usuario.errors }}
+        </div>
+
         <div class="form-group">
           <label>{{ form.nome.label }}</label>
           {{ form.nome }}

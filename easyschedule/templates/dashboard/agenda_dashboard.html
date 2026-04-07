@@ -25,35 +25,37 @@
       </div>
 
       <div class="agenda-hero-actions">
+        {% if not usuario_e_profissional %}
         <a class="btn-success" href="{% url 'agendamentos_form' %}">Novo agendamento</a>
         <a class="btn-secondary" href="{% url 'agendamentos_list' %}">Lista completa</a>
+        {% else %}
+        <a class="btn-secondary" href="{% url 'agendamentos_list' %}">Minha agenda</a>
+        {% endif %}
       </div>
     </header>
 
     <section class="agenda-metrics">
-      <article class="agenda-card metric-card">
-        <span class="metric-label">Clientes</span>
-        <strong class="metric-value">{{ total_clientes }}</strong>
-        <small class="metric-note">Base total de clientes cadastrados.</small>
-      </article>
-
-      <article class="agenda-card metric-card">
-        <span class="metric-label">Profissionais</span>
-        <strong class="metric-value">{{ total_profissionais }}</strong>
-        <small class="metric-note">Equipe disponivel para atendimento.</small>
-      </article>
-
-      <article class="agenda-card metric-card">
-        <span class="metric-label">Faturamento do mes</span>
-        <strong class="metric-value">R$ {{ faturamento_mes|floatformat:2 }}</strong>
-        <small class="metric-note">{{ total_atendimentos_mes }} atendimentos registrados no mes.</small>
-      </article>
-
-      <article class="agenda-card metric-card">
-        <span class="metric-label">Agenda de hoje</span>
-        <strong class="metric-value">{{ total_agendamentos_hoje }}</strong>
-        <small class="metric-note">{{ confirmados_hoje }} confirmados e {{ pendentes_hoje }} pendentes.</small>
-      </article>
+      {% if dashboard_widgets %}
+        {% for widget in dashboard_widgets %}
+          <article class="agenda-card metric-card">
+            <span class="metric-label">{{ widget.label }}</span>
+            <strong class="metric-value">
+              {% if widget.format == 'currency' %}
+                R$ {{ widget.value|floatformat:2 }}
+              {% else %}
+                {{ widget.value }}
+              {% endif %}
+            </strong>
+            <small class="metric-note">{{ widget.description }}</small>
+          </article>
+        {% endfor %}
+      {% else %}
+        <article class="agenda-card metric-card">
+          <span class="metric-label">Nenhum card configurado</span>
+          <strong class="metric-value">0</strong>
+          <small class="metric-note">Use a configuração do dashboard para escolher os indicadores.</small>
+        </article>
+      {% endif %}
     </section>
 
     <section class="agenda-overview">
@@ -115,6 +117,29 @@
         </div>
       </article>
     </section>
+
+    {% if notificacoes_profissional %}
+    <section class="agenda-card">
+      <div class="agenda-card-header">
+        <div>
+          <h2>Notificacoes da agenda</h2>
+          <p>Alertas do aplicativo para novos agendamentos vinculados ao seu perfil.</p>
+        </div>
+      </div>
+      <div class="today-list">
+        {% for notificacao in notificacoes_profissional %}
+        <article class="today-item">
+          <div class="today-time">{{ notificacao.criada_em|date:"H:i" }}</div>
+          <div class="today-content">
+            <strong>{{ notificacao.titulo }}</strong>
+            <p>{{ notificacao.mensagem }}</p>
+            <small>{{ notificacao.criada_em|date:"d/m/Y H:i" }}</small>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
     <section class="agenda-card agenda-calendar-card">
       <div class="agenda-card-header">

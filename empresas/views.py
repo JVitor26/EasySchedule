@@ -29,11 +29,21 @@ def cadastro_empresa(request):
             )
 
             # 🔥 AGORA VINCULA COM A EMPRESA
+            plano_escolhido = form.cleaned_data['plano']
+            tabela_valor = {
+                Empresa.PLANO_SOLO: 97,
+                Empresa.PLANO_START: 147,
+                Empresa.PLANO_ADMIN_ONLY: 127,
+            }
             empresa = Empresa.objects.create(
                 usuario=user,  # 🔥 ESSENCIAL
                 nome=form.cleaned_data['nome_empresa'],
                 tipo=form.cleaned_data['tipo_empresa'],
-                cnpj=form.cleaned_data['cpf_cnpj']
+                cnpj=form.cleaned_data['cpf_cnpj'],
+                whatsapp=form.cleaned_data['whatsapp'],
+                plano=plano_escolhido,
+                valor_mensal=tabela_valor.get(plano_escolhido, 147),
+                limite_profissionais=form.cleaned_data['limite_profissionais'],
             )
 
             messages.success(request, 'Cadastro realizado com sucesso! Faça login para continuar.')

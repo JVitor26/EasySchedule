@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Configuração do Dashboard - EasySchedule{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+
+<section class="page-card">
+  <div class="page-card-header">
+    <div>
+      <h1>Configuração do Dashboard</h1>
+      <p>Escolha os cards e indicadores que devem aparecer no seu painel principal.</p>
+    </div>
+    <div class="page-card-actions">
+      <a class="btn-secondary" href="{% url 'dashboard_home' %}">Voltar ao dashboard</a>
+    </div>
+  </div>
+
+  <form method="post" class="dashboard-settings-form">
+    {% csrf_token %}
+    <div class="dashboard-settings-header">
+      <div>
+        <h2>Cards disponíveis</h2>
+        <p class="dashboard-settings-note">Selecione os indicadores que você quer ver no dashboard. Eles serão lembrados para esta empresa.</p>
+      </div>
+      <div class="dashboard-settings-actions">
+        <button type="submit" class="btn-success">Salvar</button>
+      </div>
+    </div>
+
+    <div class="dashboard-settings">
+      <div class="dashboard-settings-column">
+        <h3>Cards da esquerda</h3>
+        {% for card in cards_by_group.left %}
+          <label class="dashboard-settings-card">
+            <input type="checkbox" name="cards" value="{{ card.key }}" {% if card.key in selected_card_keys %}checked{% endif %}>
+            <strong>{{ card.label }}</strong>
+            <p>{{ card.description }}</p>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="dashboard-settings-column">
+        <h3>Cards da direita</h3>
+        {% for card in cards_by_group.right %}
+          <label class="dashboard-settings-card">
+            <input type="checkbox" name="cards" value="{{ card.key }}" {% if card.key in selected_card_keys %}checked{% endif %}>
+            <strong>{{ card.label }}</strong>
+            <p>{{ card.description }}</p>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -325,8 +325,25 @@
     .page-card,
     .form-card,
     .confirm-card {
-        padding: 1.25rem;
-        border-radius: 1.4rem;
+        padding: 1rem;
+        border-radius: 1.1rem;
+    }
+
+    .page-title {
+        margin-bottom: 0.55rem;
+        font-size: clamp(1.85rem, 8.2vw, 2.45rem);
+        line-height: 1;
+    }
+
+    .page-subtitle,
+    .page-card-header p,
+    .field-help {
+        font-size: 0.9rem;
+        line-height: 1.55;
+    }
+
+    .page-card-header h2 {
+        font-size: 1.04rem;
     }
 
     .form-grid {
@@ -347,5 +364,23 @@
     .form-actions .btn,
     .confirm-actions .btn {
         width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-card,
+    .form-card,
+    .confirm-card {
+        padding: 0.9rem;
+        border-radius: 0.95rem;
+    }
+
+    .table-mobile-label {
+        margin-bottom: 0.25rem;
+        font-size: 0.68rem;
+    }
+
+    .table tbody td {
+        padding: 0.75rem 0.8rem;
     }
 }

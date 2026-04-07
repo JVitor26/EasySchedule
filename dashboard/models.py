@@ -12,3 +12,13 @@ class DashboardLog(models.Model):
 
     def __str__(self):
         return f"{self.usuario} - {self.acao}"
+
+
+class DashboardPreference(models.Model):
+    empresa = models.OneToOneField(Empresa, on_delete=models.CASCADE)
+    selected_cards = models.JSONField(default=list, blank=True)
+    selected_report_cards = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Preferências de dashboard de {self.empresa}"

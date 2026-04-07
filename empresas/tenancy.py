@@ -1,11 +1,12 @@
 from .models import Empresa
+from .permissions import get_profissional_profile, is_global_admin
 
 EMPRESA_SESSION_KEY = "empresa_ativa_id"
 _CACHE_MISSING = object()
 
 
 def user_has_global_empresa_access(user):
-    return bool(user.is_authenticated and (user.is_staff or user.is_superuser))
+    return is_global_admin(user)
 
 
 def get_accessible_empresas(request):
@@ -20,12 +21,16 @@ def get_accessible_empresas(request):
     elif user_has_global_empresa_access(user):
         empresas = Empresa.objects.all().order_by("nome")
     else:
-        try:
-            empresa = user.empresa
-        except Empresa.DoesNotExist:
-            empresas = Empresa.objects.none()
+        profissional = get_profissional_profile(user)
+        if profissional:
+            empresas = Empresa.objects.filter(pk=profissional.empresa_id)
         else:
-            empresas = Empresa.objects.filter(pk=empresa.pk)
+            try:
+                empresa = user.empresa
+            except Empresa.DoesNotExist:
+                empresas = Empresa.objects.none()
+            else:
+                empresas = Empresa.objects.filter(pk=empresa.pk)
 
     request._cached_empresas_disponiveis = empresas
     return empresas

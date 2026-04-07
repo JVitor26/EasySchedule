@@ -1,12 +1,18 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from .models import Pessoa
 from .forms import PessoaForm
 from django.contrib.auth.decorators import login_required
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
+from empresas.permissions import is_profissional_user
 
 @login_required
 def pessoa_list(request):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -18,6 +24,10 @@ def pessoa_list(request):
 
 @login_required
 def pessoa_form(request, pk=None):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -50,6 +60,10 @@ def pessoa_form(request, pk=None):
 
 @login_required
 def pessoa_delete(request, pk):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:

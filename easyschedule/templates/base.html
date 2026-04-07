@@ -4,6 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#22c55e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}EasySchedule{% endblock %}</title>
     <script>
         (function () {
@@ -17,6 +21,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="{% static 'img/Logo.png' %}">
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
 </head>
@@ -104,6 +109,7 @@
 
             <nav class="app-sidebar-nav" aria-label="Navegacao lateral">
                 <a class="app-sidebar-link {% if '/dashboard/' in request.path %}is-active{% endif %}" href="{% url 'dashboard_home' %}">Agenda</a>
+                {% if not usuario_e_profissional %}
                 <a class="app-sidebar-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
                 <a class="app-sidebar-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">{{ business_profile.service_term_plural|default:"Servicos" }}</a>
                 <a class="app-sidebar-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
@@ -112,6 +118,9 @@
                 <a class="app-sidebar-link {% if '/agendamentos/planos/' in request.path %}is-active{% endif %}" href="{% url 'planos_list' %}">Planos mensais</a>
                 <a class="app-sidebar-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
                 <a class="app-sidebar-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Portal do cliente</a>
+                {% else %}
+                <a class="app-sidebar-link {% if '/agendamentos/' in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">Minha agenda</a>
+                {% endif %}
             </nav>
 
             <div class="app-sidebar-card sidebar-theme-card">
@@ -150,5 +159,6 @@
     </div>
 
     <script src="{% static 'js/theme.js' %}"></script>
+    <script src="{% static 'js/pwa-register.js' %}"></script>
 </body>
 </html>

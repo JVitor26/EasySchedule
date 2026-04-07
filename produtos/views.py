@@ -1,7 +1,9 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 
 from empresas.tenancy import get_active_empresa
+from empresas.permissions import is_profissional_user
 
 from .forms import ProdutoForm
 from .models import Produto
@@ -9,6 +11,10 @@ from .models import Produto
 
 @login_required
 def produtos_list(request):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -20,6 +26,10 @@ def produtos_list(request):
 
 @login_required
 def produtos_form(request, pk=None):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -49,6 +59,10 @@ def produtos_form(request, pk=None):
 
 @login_required
 def produtos_delete(request, pk):
+    if is_profissional_user(request.user):
+        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:

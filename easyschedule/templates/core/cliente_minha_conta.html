@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Minha Conta - {{ empresa.nome }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
+
+<section class="client-company-page">
+  <div class="client-company-shell">
+    <header class="client-company-hero">
+      <div>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">Voltar ao portal da empresa</a>
+        <p class="client-eyebrow">Portal do cliente</p>
+        <h1>Minha Conta</h1>
+        <p class="client-subtitle">Gerencie seus dados, preferencias e acompanhe seu historico de agendamentos.</p>
+      </div>
+      <div class="client-company-badges">
+        <span class="preview-chip">{{ empresa.nome }}</span>
+        <span class="preview-chip">{{ total_agendamentos }} agendamento(s)</span>
+      </div>
+    </header>
+
+    <section class="client-panel">
+      <div class="client-panel-header">
+        <div>
+          <h2>Dados pessoais</h2>
+          <p>Atualize suas informacoes para facilitar os proximos atendimentos.</p>
+        </div>
+      </div>
+
+      <form method="post" class="client-booking-form">
+        {% csrf_token %}
+        <div class="client-form-grid">
+          <div class="client-form-group">
+            <label for="nome">Nome</label>
+            <input id="nome" name="nome" type="text" value="{{ cliente.nome }}" required>
+          </div>
+          <div class="client-form-group">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" value="{{ cliente.email }}">
+          </div>
+          <div class="client-form-group">
+            <label for="telefone">Telefone</label>
+            <input id="telefone" name="telefone" type="text" value="{{ cliente.telefone }}" required>
+          </div>
+          <div class="client-form-group">
+            <label for="documento">Documento</label>
+            <input id="documento" name="documento" type="text" value="{{ cliente.documento }}">
+          </div>
+
+          <div class="client-form-group client-form-group-full">
+            <label>Preferencias de comunicacao</label>
+            <div class="booking-type-grid">
+              <label class="booking-type-option">
+                <input type="checkbox" name="receber_whatsapp" {% if preferencia.receber_whatsapp %}checked{% endif %}>
+                <span class="booking-type-copy">
+                  <strong>Receber WhatsApp</strong>
+                  <small>Alertas de confirmacao, alteracoes e lembretes.</small>
+                </span>
+              </label>
+              <label class="booking-type-option">
+                <input type="checkbox" name="receber_email" {% if preferencia.receber_email %}checked{% endif %}>
+                <span class="booking-type-copy">
+                  <strong>Receber Email</strong>
+                  <small>Comprovantes e atualizacoes da agenda.</small>
+                </span>
+              </label>
+              <label class="booking-type-option">
+                <input type="checkbox" name="receber_marketing" {% if preferencia.receber_marketing %}checked{% endif %}>
+                <span class="booking-type-copy">
+                  <strong>Novidades e promocoes</strong>
+                  <small>Ofertas e campanhas da empresa.</small>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="client-form-group client-form-group-full">
+            <label>Senha do portal</label>
+            <div class="client-form-grid">
+              <div class="client-form-group">
+                <label for="senha_atual">{% if cliente_has_portal_password %}Senha atual{% else %}Primeira senha{% endif %}</label>
+                <input id="senha_atual" name="senha_atual" type="password" {% if not cliente_has_portal_password %}placeholder="Deixe em branco para criar a primeira senha"{% endif %}>
+              </div>
+              <div class="client-form-group">
+                <label for="nova_senha">Nova senha</label>
+                <input id="nova_senha" name="nova_senha" type="password" placeholder="Minimo de 6 caracteres">
+              </div>
+              <div class="client-form-group">
+                <label for="confirmar_nova_senha">Confirmar nova senha</label>
+                <input id="confirmar_nova_senha" name="confirmar_nova_senha" type="password">
+              </div>
+            </div>
+            <small class="form-help">Voce pode entrar no portal com email ou WhatsApp e essa senha.</small>
+          </div>
+        </div>
+
+        <div class="client-form-actions">
+          <button type="submit" class="btn-success">Salvar minha conta</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="client-detail-grid">
+      <article class="client-panel">
+        <div class="client-panel-header">
+          <div>
+            <h2>Proximos agendamentos</h2>
+            <p>Compromissos futuros e em andamento.</p>
+          </div>
+        </div>
+        <div class="client-mini-list">
+          {% for ag in proximos_agendamentos %}
+          <article class="mini-item">
+            <strong>{{ ag.data|date:'d/m/Y' }} as {{ ag.hora|time:'H:i' }}</strong>
+            <span>{{ ag.servico.nome }} com {{ ag.profissional.nome }}</span>
+            <small>Status: {{ ag.get_status_display }}</small>
+          </article>
+          {% empty %}
+          <p class="client-empty-inline">Nenhum agendamento futuro no momento.</p>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="client-panel">
+        <div class="client-panel-header">
+          <div>
+            <h2>Historico</h2>
+            <p>Ultimos atendimentos realizados.</p>
+          </div>
+        </div>
+        <div class="client-mini-list">
+          {% for ag in historico_agendamentos %}
+          <article class="mini-item">
+            <strong>{{ ag.data|date:'d/m/Y' }} as {{ ag.hora|time:'H:i' }}</strong>
+            <span>{{ ag.servico.nome }} com {{ ag.profissional.nome }}</span>
+            <small>Status: {{ ag.get_status_display }}</small>
+          </article>
+          {% empty %}
+          <p class="client-empty-inline">Seu historico ainda esta vazio.</p>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+  </div>
+</section>
+{% endblock %}

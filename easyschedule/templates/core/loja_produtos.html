@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Loja de Produtos - {{ empresa.nome }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
+
+<section class="client-company-page" data-slots-url="{% url 'cliente_horarios' empresa.id %}">
+  <div class="client-company-shell">
+    <!-- Header da Loja -->
+    <header class="client-company-hero">
+      <div>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">← Volta para {{ profile.appointment_term_plural }}</a>
+        <p class="client-eyebrow">🏪 Loja de Produtos</p>
+        <h1>Confira nossos produtos</h1>
+        <p class="client-subtitle">
+          Escolha produtos para adicionar ao seu agendamento. O preço total será a soma do seu {{ profile.appointment_term_singular }} + os produtos selecionados.
+        </p>
+      </div>
+      <div class="client-company-badges">
+        <span class="preview-chip">🛒 Carrinho</span>
+        <span class="preview-chip" id="carrinho-count-badge">0 itens</span>
+      </div>
+    </header>
+
+    <!-- Filtros e Busca -->
+    <section class="client-panel">
+      <form method="GET" style="display: grid; grid-template-columns: 1fr 200px 120px; gap: 1rem; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: 0.55rem;">
+          <label style="color: var(--text-2); font-weight: 700;">Buscar produtos</label>
+          <input type="text" name="busca" placeholder="Digite o nome..." value="{{ busca }}" 
+                 style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--input-bg); color: var(--text-1);" />
+        </div>
+        
+        {% if categorias %}
+        <div style="display: flex; flex-direction: column; gap: 0.55rem;">
+          <label style="color: var(--text-2); font-weight: 700;">Categoria</label>
+          <select name="categoria" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--input-bg); color: var(--text-1);">
+            <option value="">Todas</option>
+            {% for cat in categorias %}
+            <option value="{{ cat }}" {% if cat == categoria_selecionada %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        
+        <button type="submit" class="btn-success">Filtrar</button>
+      </form>
+      
+      {% if busca or categoria %}
+      <p style="margin-top: 0.75rem; text-align: right;">
+        <a href="{% url 'loja_produtos' empresa.id %}" style="color: var(--accent); text-decoration: underline; font-weight: 600;">Limpar filtros</a>
+      </p>
+      {% endif %}
+    </section>
+
+    <!-- Grid de Produtos -->
+    {% if produtos %}
+    <section class="client-panel">
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;">
+        {% for produto in produtos %}
+        <div class="client-product-card">
+          <div class="client-product-image">
+            {% if produto.foto %}
+            <img src="{{ produto.foto.url }}" alt="{{ produto.nome }}" />
+            {% else %}
+            📦
+            {% endif %}
+          </div>
+          <div class="client-product-copy">
+            {% if produto.categoria %}
+            <span style="text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; color: var(--accent-2); font-weight: 700;">{{ produto.categoria }}</span>
+            {% endif %}
+            
+            <strong>{{ produto.nome }}</strong>
+            
+            {% if produto.descricao %}
+            <p style="font-size: 0.9rem; margin: 0;">{{ produto.descricao }}</p>
+            {% endif %}
+            
+            <div style="color: var(--accent); font-weight: 700; font-size: 1.15rem; margin-top: 0.5rem;">
+              R$ {{ produto.preco|floatformat:2 }}
+            </div>
+            
+            <div style="font-size: 0.8rem; margin-top: 0.5rem;">
+              {% if produto.estoque_disponivel > 0 %}
+              <span style="color: var(--success);">✓ {{ produto.estoque_disponivel }} disponível{{ produto.estoque_disponivel|pluralize }}</span>
+              {% else %}
+              <span style="color: var(--danger);">✗ Indisponível</span>
+              {% endif %}
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+              <input type="number" class="prod-qty-input" value="1" min="1" max="{{ produto.estoque_disponivel }}" 
+                     data-produto-id="{{ produto.id }}" 
+                     style="flex: 1; padding: 0.6rem; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--input-bg); color: var(--text-1); text-align: center;" />
+              <button type="button" class="btn-success btn-add-carrinho" data-produto-id="{{ produto.id }}" data-produto-nome="{{ produto.nome }}"
+                      {% if produto.estoque_disponivel == 0 %}disabled{% endif %} style="flex: 1;">
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% else %}
+    <section class="client-panel">
+      <p style="text-align: center; color: var(--text-2); padding: 2rem 1rem;">
+        Nenhum produto encontrado.
+        <a href="{% url 'loja_produtos' empresa.id %}" style="color: var(--accent); text-decoration: underline; display: block; margin-top: 0.5rem;">Ver todos os produtos</a>
+      </p>
+    </section>
+    {% endif %}
+
+    <!-- Resumo do Carrinho -->
+    <section class="client-panel" id="carrinho-section" style="display: none; background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), transparent 55%), var(--surface-1);">
+      <div class="client-panel-header">
+        <div>
+          <h2>🛒 Produtos no Carrinho</h2>
+          <p>Itens que serão adicionados ao seu agendamento</p>
+        </div>
+      </div>
+
+      <div id="carrinho-items" style="display: none;">
+        <div id="carrinho-lista" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        </div>
+        
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span style="color: var(--text-2);">Total de produtos:</span>
+            <strong style="color: var(--accent); font-size: 1.2rem; display: block; margin-top: 0.25rem;">R$ <span id="carrinho-total">0.00</span></strong>
+          </div>
+          <div style="display: flex; gap: 0.75rem;">
+            <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.7rem 1.2rem; text-decoration: none;">Mais itens</a>
+            <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.7rem 1.2rem; background: var(--danger);">Limpar</button>
+          </div>
+        </div>
+      </div>
+
+      <p id="carrinho-vazio" style="color: var(--text-2); text-align: center; padding: 1.5rem; margin: 0;">
+        Nenhum produto no carrinho.
+      </p>
+    </section>
+
+    <!-- Botão de Continuar -->
+    <section class="client-panel" style="text-align: center; background: var(--accent-soft); border: 1px solid var(--border-strong);">
+      <a href="{% url 'cliente_empresa' empresa.id %}" class="btn-success" style="display: inline-block; padding: 0.9rem 2rem; text-decoration: none;">
+        ✓ Voltar para agendamento
+      </a>
+    </section>
+  </div>
+</section>
+
+<script>
+const empresa_id = {{ empresa.id }};
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                  document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+
+function atualizarCarrinho() {
+  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+    .then(r => r.json())
+    .then(data => {
+      const carrinhoSection = document.getElementById('carrinho-section');
+      const carrinhoItems = document.getElementById('carrinho-items');
+      const carrinhoLista = document.getElementById('carrinho-lista');
+      const carrinhoVazio = document.getElementById('carrinho-vazio');
+      const carrinhoTotal = document.getElementById('carrinho-total');
+      const carrinhoCountBadge = document.getElementById('carrinho-count-badge');
+      
+      if (data.total_itens > 0) {
+        carrinhoItems.style.display = 'block';
+        carrinhoVazio.style.display = 'none';
+        carrinhoSection.style.display = 'block';
+        
+        carrinhoLista.innerHTML = data.itens.map(item => `
+          <div style="padding: 0.75rem; background: var(--surface-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong style="color: var(--text-1);">${item.nome}</strong>
+              <div style="color: var(--text-2); font-size: 0.9rem; margin-top: 0.25rem;">
+                ${item.quantidade}x R$ ${parseFloat(item.preco).toFixed(2)}
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: var(--accent); font-weight: 700;">R$ ${parseFloat(item.preco_total).toFixed(2)}</div>
+            </div>
+          </div>
+        `).join('');
+        
+        carrinhoTotal.textContent = parseFloat(data.total_preco).toFixed(2);
+        carrinhoCountBadge.textContent = `${data.total_itens} item${data.total_itens !== 1 ? 'ns' : ''}`;
+      } else {
+        carrinhoSection.style.display = 'none';
+        carrinhoItems.style.display = 'none';
+        carrinhoVazio.style.display = 'block';
+        carrinhoCountBadge.textContent = '0 itens';
+      }
+    })
+    .catch(err => console.error('Erro ao carregar carrinho:', err));
+}
+
+window.limparCarrinho = function() {
+  if (confirm('Tem certeza que deseja limpar o carrinho?')) {
+    fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+      .then(r => r.json())
+      .then(data => {
+        let promises = data.itens.map(item =>
+          fetch(`/cliente/empresa/${empresa_id}/api/carrinho/remover/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrftoken,
+            },
+            body: JSON.stringify({ produto_id: item.produto_id }),
+          })
+        );
+        return Promise.all(promises);
+      })
+      .then(() => atualizarCarrinho());
+  }
+};
+
+document.querySelectorAll('.btn-add-carrinho').forEach(btn => {
+  btn.addEventListener('click', async function() {
+    const produto_id = this.getAttribute('data-produto-id');
+    const produto_nome = this.getAttribute('data-produto-nome');
+    const input = document.querySelector(`.prod-qty-input[data-produto-id="${produto_id}"]`);
+    const quantidade = parseInt(input.value);
+    
+    this.disabled = true;
+    this.textContent = '⏳ Adicionando...';
+    
+    try {
+      const response = await fetch(`/cliente/empresa/${empresa_id}/api/carrinho/adicionar/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({ produto_id, quantidade }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert(`✓ ${produto_nome} adicionado ao carrinho!`);
+        input.value = 1;
+        atualizarCarrinho();
+      } else {
+        alert(`✗ ${data.message}`);
+      }
+    } catch (error) {
+      alert('Erro ao adicionar ao carrinho');
+    } finally {
+      this.disabled = false;
+      this.textContent = 'Adicionar';
+    }
+  });
+});
+
+atualizarCarrinho();
+</script>
+
+<style>
+  .btn-success {
+    padding: 0.7rem 1.2rem;
+    background: var(--accent);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.2s;
+    font-size: 0.95rem;
+  }
+
+  .btn-success:hover:not(:disabled) {
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .btn-success:disabled {
+    background: var(--text-3);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    font-family: var(--font-ui);
+    font-size: 0.95rem;
+  }
+
+  input::placeholder {
+    color: var(--input-placeholder);
+  }
+
+  input:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+  }
+
+  @media (max-width: 1024px) {
+    section.client-panel > div {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  }
+
+  @media (max-width: 640px) {
+    section.client-panel > div {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
+
+{% endblock %}

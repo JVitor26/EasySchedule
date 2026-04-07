@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -7,6 +8,7 @@ from django.utils import timezone
 
 from agendamentos.models import Agendamento, Pagamento, PlanoMensal
 from empresas.models import Empresa
+from core.models import PasswordRecoveryCode
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
@@ -283,3 +285,142 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(plano.pagamento_status, "pago")
         self.assertEqual(plano.agendamentos.filter(status="confirmado").count(), plano.quantidade_encontros)
         self.assertEqual(plano.agendamentos.filter(forma_pagamento="pix").count(), plano.quantidade_encontros)
+
+
+class PasswordRecoveryTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="empresa-segura@example.com",
+            email="empresa-segura@example.com",
+            password="senha-antiga-123",
+        )
+        self.empresa = Empresa.objects.create(
+            usuario=self.owner,
+            nome="Studio Seguranca",
+            tipo="barbearia",
+            cnpj="12312312312",
+            whatsapp="65999990000",
+        )
+        self.profissional_user = User.objects.create_user(
+            username="profissional@example.com",
+            email="profissional@example.com",
+            password="senha-antiga-123",
+        )
+        self.profissional = Profissional.objects.create(
+            empresa=self.empresa,
+            usuario=self.profissional_user,
+            nome="Profissional Login",
+            especialidade="Corte",
+            telefone="65999991111",
+            email="profissional@example.com",
+            ativo=True,
+        )
+        self.cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Cliente Portal",
+            email="cliente.portal@example.com",
+            telefone="65999992222",
+            documento="12345678900",
+        )
+        self.cliente.set_portal_password("senha-portal-antiga")
+        self.cliente.save(update_fields=["portal_password", "portal_password_updated_at"])
+
+    def test_recuperacao_de_senha_interna_por_email(self):
+        response = self.client.post(
+            reverse("password_recovery_request"),
+            {
+                "account_type": "internal",
+                "identifier": "empresa-segura@example.com",
+                "channel": "email",
+            },
+        )
+
+        self.assertRedirects(response, reverse("password_recovery_confirm"))
+        recovery = PasswordRecoveryCode.objects.get(account_type="internal", user=self.owner)
+
+        confirm_response = self.client.post(
+            reverse("password_recovery_confirm"),
+            {
+                "code": recovery.codigo,
+                "new_password1": "nova-senha-456",
+                "new_password2": "nova-senha-456",
+            },
+        )
+
+        self.assertRedirects(confirm_response, reverse("login"))
+        self.owner.refresh_from_db()
+        recovery.refresh_from_db()
+
+        self.assertTrue(self.owner.check_password("nova-senha-456"))
+        self.assertIsNotNone(recovery.usado_em)
+
+    def test_recuperacao_de_senha_interna_por_whatsapp_para_profissional(self):
+        response = self.client.post(
+            reverse("password_recovery_request"),
+            {
+                "account_type": "internal",
+                "identifier": "(65) 99999-1111",
+                "channel": "whatsapp",
+            },
+        )
+
+        self.assertRedirects(response, reverse("password_recovery_confirm"))
+        recovery = PasswordRecoveryCode.objects.get(account_type="internal", user=self.profissional_user)
+
+        confirm_response = self.client.post(
+            reverse("password_recovery_confirm"),
+            {
+                "code": recovery.codigo,
+                "new_password1": "senha-prof-789",
+                "new_password2": "senha-prof-789",
+            },
+        )
+
+        self.assertRedirects(confirm_response, reverse("login"))
+        self.profissional_user.refresh_from_db()
+        self.assertTrue(self.profissional_user.check_password("senha-prof-789"))
+
+    def test_login_do_portal_com_senha(self):
+        response = self.client.post(
+            reverse("portal_password_login_api", args=[self.empresa.pk]),
+            data=json.dumps({
+                "identifier": "cliente.portal@example.com",
+                "password": "senha-portal-antiga",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session[f"portal_cliente_empresa_{self.empresa.pk}"], self.cliente.pk)
+        self.assertEqual(response.json()["status"], "sucesso")
+
+    def test_recuperacao_de_senha_do_portal_por_whatsapp(self):
+        response = self.client.post(
+            reverse("password_recovery_request"),
+            {
+                "account_type": "client",
+                "empresa": self.empresa.pk,
+                "identifier": "65999992222",
+                "channel": "whatsapp",
+            },
+        )
+
+        self.assertRedirects(response, reverse("password_recovery_confirm"))
+        recovery = PasswordRecoveryCode.objects.get(account_type="client", cliente=self.cliente)
+
+        confirm_response = self.client.post(
+            reverse("password_recovery_confirm"),
+            {
+                "code": recovery.codigo,
+                "new_password1": "nova-senha-portal",
+                "new_password2": "nova-senha-portal",
+            },
+        )
+
+        self.assertRedirects(confirm_response, reverse("cliente_empresa", args=[self.empresa.pk]))
+        self.cliente.refresh_from_db()
+        recovery.refresh_from_db()
+
+        self.assertTrue(self.cliente.check_portal_password("nova-senha-portal"))
+        self.assertEqual(self.client.session[f"portal_cliente_empresa_{self.empresa.pk}"], self.cliente.pk)
+        self.assertIsNotNone(recovery.usado_em)

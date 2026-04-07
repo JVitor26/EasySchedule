@@ -1,8 +1,10 @@
 from django.db import models
+from django.contrib.auth.models import User
 from empresas.models import Empresa	
 
 class Profissional(models.Model):
 	empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+	usuario = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='profissional_profile')
 	nome = models.CharField(max_length=100)
 	especialidade = models.CharField(max_length=100)
 	telefone = models.CharField(max_length=20)

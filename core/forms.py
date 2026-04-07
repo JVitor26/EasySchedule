@@ -1,12 +1,14 @@
 import re
+import json
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from django.db.models import F
 
 from agendamentos.availability import list_available_slots
-from agendamentos.models import Agendamento, Pagamento, PlanoMensal
+from agendamentos.models import Agendamento, Pagamento, PlanoMensal, AgendamentoProduto
 from agendamentos.plans import (
     WEEKDAY_CHOICES,
     list_monthly_available_slots,
@@ -17,12 +19,77 @@ from empresas.business_profiles import get_business_profile
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
+from produtos.models import Produto
+from .notifications import notify_booking_created
+from empresas.models import Empresa
 
 
 BOOKING_TYPE_CHOICES = [
     ("avulso", "Somente um dia"),
     ("pacote_mensal", "Pacote mensal"),
 ]
+
+
+class PasswordRecoveryRequestForm(forms.Form):
+    ACCOUNT_TYPE_CHOICES = [
+        ("internal", "Conta da empresa"),
+        ("client", "Cliente do portal"),
+    ]
+
+    CHANNEL_CHOICES = [
+        ("email", "Email"),
+        ("whatsapp", "WhatsApp"),
+    ]
+
+    account_type = forms.ChoiceField(choices=ACCOUNT_TYPE_CHOICES, initial="internal")
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.order_by("nome"),
+        required=False,
+        empty_label="Selecione a empresa do portal",
+    )
+    identifier = forms.CharField(label="Email ou WhatsApp", max_length=255)
+    channel = forms.ChoiceField(label="Canal de envio", choices=CHANNEL_CHOICES, initial="email")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["identifier"].widget.attrs.update({
+            "placeholder": "voce@exemplo.com ou (65) 99999-9999",
+            "autocomplete": "username",
+        })
+
+    def clean_identifier(self):
+        return (self.cleaned_data.get("identifier") or "").strip().lower()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("account_type") == "client" and not cleaned_data.get("empresa"):
+            self.add_error("empresa", "Selecione a empresa para recuperar a senha do portal.")
+        return cleaned_data
+
+
+class PasswordRecoveryConfirmForm(forms.Form):
+    code = forms.CharField(label="Codigo", max_length=6)
+    new_password1 = forms.CharField(label="Nova senha", widget=forms.PasswordInput)
+    new_password2 = forms.CharField(label="Confirmar nova senha", widget=forms.PasswordInput)
+
+    def clean_code(self):
+        return re.sub(r"\D", "", self.cleaned_data.get("code", ""))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get("new_password1") or ""
+        password2 = cleaned_data.get("new_password2") or ""
+
+        if cleaned_data.get("code") and len(cleaned_data["code"]) != 6:
+            self.add_error("code", "Informe o codigo de 6 digitos.")
+
+        if password1 and len(password1) < 6:
+            self.add_error("new_password1", "Use pelo menos 6 caracteres.")
+
+        if password1 and password2 and password1 != password2:
+            self.add_error("new_password2", "As senhas nao conferem.")
+
+        return cleaned_data
 
 
 class PublicBookingForm(forms.Form):
@@ -47,6 +114,7 @@ class PublicBookingForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
+    produtos_json = forms.CharField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, *args, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -338,6 +406,17 @@ class PublicBookingForm(forms.Form):
     def save(self):
         cliente = self._get_or_create_cliente()
         booking_type = self.cleaned_data["tipo_reserva"]
+        
+        # Processar produtos do carrinho
+        produtos_data = []
+        valor_produtos = 0
+        try:
+            if self.cleaned_data.get("produtos_json"):
+                produtos_data = json.loads(self.cleaned_data["produtos_json"])
+                valor_produtos = sum(float(item.get("preco_total", 0)) for item in produtos_data)
+        except (json.JSONDecodeError, ValueError):
+            produtos_data = []
+            valor_produtos = 0
 
         if booking_type == "pacote_mensal":
             plano = PlanoMensal(
@@ -391,7 +470,25 @@ class PublicBookingForm(forms.Form):
                     self.add_error(form_field, message)
             raise
 
-        pagamento = Pagamento.sync_for_agendamento(agendamento)
+        # Adicionar produtos ao agendamento
+        self._process_agendamento_produtos(agendamento, produtos_data)
+        
+        # Calcular valor do pagamento (serviço + produtos)
+        valor_pagamento = float(agendamento.servico.preco) + valor_produtos
+
+        # Atualizar ou criar pagamento
+        pagamento = Pagamento.objects.filter(agendamento=agendamento).first()
+        if not pagamento:
+            pagamento = Pagamento(
+                empresa=self.empresa,
+                agendamento=agendamento,
+                cliente=cliente,
+            )
+        pagamento.valor = valor_pagamento
+        pagamento.save()
+
+        notify_booking_created(agendamento)
+        
         return {
             "tipo_reserva": "avulso",
             "cliente": cliente,
@@ -399,6 +496,39 @@ class PublicBookingForm(forms.Form):
             "pagamento": pagamento,
             "plano": None,
         }
+
+    def _process_agendamento_produtos(self, agendamento, produtos_data):
+        """Processar produtos do carrinho e criar AgendamentoProduto records"""
+        for item in produtos_data:
+            try:
+                produto_id = int(item.get("produto_id"))
+                quantidade = int(item.get("quantidade", 1))
+                preco = float(item.get("preco"))
+                
+                produto = Produto.objects.get(pk=produto_id, empresa=self.empresa)
+                
+                # Verificar estoque
+                if produto.estoque_disponivel < quantidade:
+                    raise ValidationError(
+                        f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque_disponivel}"
+                    )
+                
+                # Reservar estoque
+                produto.estoque_reservado = F('estoque_reservado') + quantidade
+                produto.save()
+                
+                # Criar AgendamentoProduto
+                AgendamentoProduto.objects.create(
+                    empresa=self.empresa,
+                    agendamento=agendamento,
+                    produto=produto,
+                    quantidade=quantidade,
+                    preco_unitario=preco,
+                    pagamento_status="reservado",
+                )
+            except (ValueError, TypeError, Produto.DoesNotExist, ValidationError):
+                # Ignorar itens inválidos (foram validados no frontend)
+                continue
 
 
 class PublicCheckoutForm(forms.Form):
