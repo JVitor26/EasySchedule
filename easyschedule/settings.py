@@ -109,6 +109,8 @@ STATICFILES_DIRS = [
     BASE_DIR / 'easyschedule' / 'static',
 ]
 
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # ⚠️ não precisa de STATIC_ROOT no local
 
 
