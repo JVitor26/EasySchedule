@@ -355,6 +355,9 @@ def password_recovery_request(request):
     initial = {}
     if request.GET.get("tipo") == "cliente":
         initial["account_type"] = "client"
+    if request.user.is_authenticated:
+        messages.warning(request, "Voce ja esta autenticado. Use o menu da conta para trocar sua senha.")
+        return redirect("dashboard_home")
 
     empresa_id = request.GET.get("empresa")
     if empresa_id and empresa_id.isdigit():
@@ -423,6 +426,9 @@ def password_recovery_request(request):
 def password_recovery_confirm(request):
     recovery_id = request.session.get("password_recovery_id")
     recovery = PasswordRecoveryCode.objects.filter(pk=recovery_id).select_related("user", "cliente", "empresa").first()
+    if request.user.is_authenticated:
+        messages.warning(request, "Voce ja esta autenticado. Use o menu da conta para trocar sua senha.")
+        return redirect("dashboard_home")
 
     if not recovery or not recovery.disponivel:
         request.session.pop("password_recovery_id", None)
