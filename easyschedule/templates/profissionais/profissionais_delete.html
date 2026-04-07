@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir Profissional{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Exclusao</p>
+    <h1 class="confirm-title">Remover {{ business_profile.professional_term_singular|default:"Profissional" }}</h1>
+    <p class="confirm-copy">
+      Tem certeza que deseja excluir <strong>{{ profissional.nome }}</strong>? Essa acao retira o profissional
+      da equipe cadastrada e pode afetar agendamentos futuros.
+    </p>
+    <span class="confirm-highlight">{{ profissional.especialidade|default:"Sem especialidade informada" }}</span>
+
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Excluir profissional</button>
+      <a href="{% url 'profissionais_list' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

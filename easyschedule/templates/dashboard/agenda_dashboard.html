@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Agenda - EasySchedule{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+
+<section
+  class="agenda-page"
+  data-events-url="{% url 'agendamentos_api' %}"
+  data-move-url-template="{% url 'agendamentos_move' 999999 %}"
+  data-edit-url-template="{% url 'agendamentos_edit' 999999 %}"
+>
+  <div class="agenda-shell">
+    <header class="agenda-hero">
+      <div class="agenda-copy">
+        <p class="agenda-eyebrow">Operacao diaria</p>
+        <h1>Agenda</h1>
+        <p class="agenda-subtitle">
+          Visualize os atendimentos do dia, acompanhe os indicadores principais e reorganize o calendario
+          com filtros por profissional e status.
+        </p>
+      </div>
+
+      <div class="agenda-hero-actions">
+        <a class="btn-success" href="{% url 'agendamentos_form' %}">Novo agendamento</a>
+        <a class="btn-secondary" href="{% url 'agendamentos_list' %}">Lista completa</a>
+      </div>
+    </header>
+
+    <section class="agenda-metrics">
+      <article class="agenda-card metric-card">
+        <span class="metric-label">Clientes</span>
+        <strong class="metric-value">{{ total_clientes }}</strong>
+        <small class="metric-note">Base total de clientes cadastrados.</small>
+      </article>
+
+      <article class="agenda-card metric-card">
+        <span class="metric-label">Profissionais</span>
+        <strong class="metric-value">{{ total_profissionais }}</strong>
+        <small class="metric-note">Equipe disponivel para atendimento.</small>
+      </article>
+
+      <article class="agenda-card metric-card">
+        <span class="metric-label">Faturamento do mes</span>
+        <strong class="metric-value">R$ {{ faturamento_mes|floatformat:2 }}</strong>
+        <small class="metric-note">{{ total_atendimentos_mes }} atendimentos registrados no mes.</small>
+      </article>
+
+      <article class="agenda-card metric-card">
+        <span class="metric-label">Agenda de hoje</span>
+        <strong class="metric-value">{{ total_agendamentos_hoje }}</strong>
+        <small class="metric-note">{{ confirmados_hoje }} confirmados e {{ pendentes_hoje }} pendentes.</small>
+      </article>
+    </section>
+
+    <section class="agenda-overview">
+      <article class="agenda-card agenda-today-card">
+        <div class="agenda-card-header">
+          <div>
+            <h2>Atendimentos de hoje</h2>
+            <p>{{ hoje|date:"d/m/Y" }} com prioridade para o que acontece nas proximas horas.</p>
+          </div>
+        </div>
+
+        {% if agendamentos_hoje %}
+        <div class="today-list">
+          {% for agendamento in agendamentos_hoje %}
+          <article class="today-item">
+            <div class="today-time">{{ agendamento.hora|time:"H:i" }}</div>
+            <div class="today-content">
+              <strong>{{ agendamento.cliente.nome }}</strong>
+              <p>{{ agendamento.servico.nome }} com {{ agendamento.profissional.nome }}</p>
+              <small>R$ {{ agendamento.servico.preco|floatformat:2 }}</small>
+            </div>
+            <span class="agenda-status status-{{ agendamento.status }}">{{ agendamento.get_status_display }}</span>
+          </article>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="agenda-empty">
+          <strong>Nenhum agendamento para hoje.</strong>
+          <p>Use o botao de novo agendamento para preencher a agenda do dia.</p>
+        </div>
+        {% endif %}
+      </article>
+
+      <article class="agenda-card agenda-summary-card">
+        <div class="agenda-card-header">
+          <div>
+            <h2>Resumo rapido</h2>
+            <p>Um panorama da operacao atual para facilitar as decisoes do dia.</p>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>Servicos cadastrados</span>
+            <strong>{{ total_servicos }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Agendamentos totais</span>
+            <strong>{{ total_agendamentos }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Atendimentos no mes</span>
+            <strong>{{ total_atendimentos_mes }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Confirmados hoje</span>
+            <strong>{{ confirmados_hoje }}</strong>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="agenda-card agenda-calendar-card">
+      <div class="agenda-card-header">
+        <div>
+          <h2>Calendario operacional</h2>
+          <p>Filtre a visualizacao e arraste os eventos para reorganizar os horarios.</p>
+        </div>
+      </div>
+
+      <div class="agenda-filter-grid">
+        <div class="agenda-filter-field">
+          <label for="agendaFiltroProfissional">Profissional</label>
+          <select id="agendaFiltroProfissional">
+            <option value="">Todos os profissionais</option>
+            {% for profissional in profissionais %}
+            <option value="{{ profissional.id }}">{{ profissional.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="agenda-filter-field">
+          <label for="agendaFiltroStatus">Status</label>
+          <select id="agendaFiltroStatus">
+            <option value="">Todos os status</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="agenda-filter-actions">
+          <button type="button" class="btn-secondary" id="agendaLimparFiltros">Limpar filtros</button>
+        </div>
+
+        <p class="agenda-feedback" id="agendaFeedback" role="status">
+          Arraste um atendimento para reagendar direto no calendario.
+        </p>
+      </div>
+
+      <div class="agenda-legend">
+        <span><i class="legend-dot dot-pendente"></i>Pendente</span>
+        <span><i class="legend-dot dot-confirmado"></i>Confirmado</span>
+        <span><i class="legend-dot dot-finalizado"></i>Finalizado</span>
+        <span><i class="legend-dot dot-cancelado"></i>Cancelado</span>
+      </div>
+
+      <div id="calendar"></div>
+    </section>
+  </div>
+</section>
+
+<div id="modalEvento" class="agenda-modal" hidden>
+  <div class="agenda-modal-backdrop" data-close-modal="true"></div>
+  <div class="agenda-modal-box" role="dialog" aria-modal="true" aria-labelledby="agendaModalTitle">
+    <div class="agenda-modal-header">
+      <div>
+        <p class="agenda-modal-eyebrow">Detalhes do atendimento</p>
+        <h3 id="agendaModalTitle">Agendamento</h3>
+      </div>
+      <button type="button" class="agenda-modal-close" id="fecharModal" aria-label="Fechar">x</button>
+    </div>
+
+    <div class="agenda-modal-grid">
+      <div>
+        <span class="modal-label">Cliente</span>
+        <strong id="modalCliente">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Profissional</span>
+        <strong id="modalProfissional">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Servico</span>
+        <strong id="modalServico">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Valor</span>
+        <strong id="modalValor">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Status</span>
+        <strong id="modalStatus">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Telefone</span>
+        <strong id="modalTelefone">-</strong>
+      </div>
+      <div class="modal-notes">
+        <span class="modal-label">Observacoes</span>
+        <p id="modalObservacoes">Sem observacoes informadas.</p>
+      </div>
+    </div>
+
+    <div class="agenda-modal-actions">
+      <a class="btn-success" id="modalEditarLink" href="{% url 'agendamentos_list' %}">Editar agendamento</a>
+      <button type="button" class="btn-secondary" id="modalFecharAcao">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script src="{% static 'js/agenda.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Login | EasySchedule{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/login.css' %}">
+
+<section class="auth-shell">
+  <aside class="auth-stage">
+    <div class="auth-logo">
+      <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="auth-logo-image">
+      <div class="auth-logo-copy">
+        <strong>EasySchedule</strong>
+        <span>Gestao elegante para agendas premium</span>
+      </div>
+    </div>
+
+    <div class="auth-hero">
+      <p class="auth-eyebrow">Acesso seguro</p>
+      <h1 class="auth-stage-title">Entre na operacao da sua empresa</h1>
+      <p class="auth-stage-copy">
+        Centralize agenda, atendimento, relatorios e relacionamento com seus clientes em uma experiencia
+        visual consistente e refinada.
+      </p>
+    </div>
+
+    <div class="auth-stage-points">
+      <div class="auth-stage-point">
+        <strong>Agenda premium</strong>
+        <span>Visualizacao clara, filtros inteligentes e reagendamento com fluidez.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Multiempresa</strong>
+        <span>Controle por empresa com isolamento de dados e troca segura para administradores.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Relatorios visuais</strong>
+        <span>Faturamento, destaque da equipe e desempenho em um painel elegante.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Portal do cliente</strong>
+        <span>Reserva online com linguagem adaptada ao tipo de negocio.</span>
+      </div>
+    </div>
+  </aside>
+
+  <section class="auth-card">
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+
+      <div class="auth-tabs">
+        <a href="{% url 'cadastro_empresa' %}" class="auth-tab">Cadastre-se</a>
+        <a href="{% url 'login' %}" class="auth-tab active">Login</a>
+      </div>
+
+      <h2 class="auth-title">Bem-vindo de volta</h2>
+      <p class="auth-subtitle">Use seu e-mail corporativo para entrar e continuar sua operacao.</p>
+
+      {% if form.non_field_errors %}
+      <div class="auth-form-errors">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="auth-fields">
+        <label for="id_username">Email</label>
+        {{ form.username }}
+        {{ form.username.errors }}
+      </div>
+
+      <div class="auth-fields auth-password-field">
+        <label for="id_password">Senha</label>
+        {{ form.password }}
+        {{ form.password.errors }}
+        <button type="button" id="togglePassword" class="password-toggle" aria-label="Mostrar ou ocultar senha">
+          <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24">
+            <path stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </button>
+      </div>
+
+      <button type="submit" class="btn-form">Entrar</button>
+
+      <div class="auth-footer">
+        Nao tem uma conta?
+        <a href="{% url 'cadastro_empresa' %}">Cadastre sua empresa</a>
+      </div>
+
+      <div class="auth-legal">© 2026 EasySchedule. Todos os direitos reservados.</div>
+    </form>
+  </section>
+</section>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const passwordInput = document.getElementById('id_password');
+    const toggle = document.getElementById('togglePassword');
+    const eyeIcon = document.getElementById('eyeIcon');
+    if (passwordInput && toggle) {
+      toggle.addEventListener('click', function () {
+        if (passwordInput.type === 'password') {
+          passwordInput.type = 'text';
+          eyeIcon.innerHTML = '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" fill="none"/>';
+        } else {
+          passwordInput.type = 'password';
+          eyeIcon.innerHTML = '<path stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>';
+        }
+      });
+    }
+  });
+</script>
+
+{% endblock %}

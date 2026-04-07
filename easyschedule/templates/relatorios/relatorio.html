@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Relatórios - EasySchedule{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<link rel="stylesheet" href="{% static 'css/relatorio.css' %}">
+
+<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}">
+  <div class="report-shell">
+    <header class="report-header">
+      <div class="report-heading">
+        <p class="report-eyebrow">Painel analítico</p>
+        <h1>Relatórios</h1>
+        <p class="report-subtitle">
+          Acompanhe faturamento, volume de atendimentos, cancelamentos e desempenho dos seus profissionais
+          em um único painel.
+        </p>
+      </div>
+
+      <aside class="report-period-card">
+        <span class="report-period-label">Período analisado</span>
+        <strong id="reportPeriod">Período completo</strong>
+        <small id="reportUpdatedAt">Aguardando atualização</small>
+      </aside>
+    </header>
+
+    <section class="report-card report-filters">
+      <div class="report-card-header">
+        <div>
+          <h2>Filtros</h2>
+          <p>Selecione um intervalo para recalcular os indicadores do relatório.</p>
+        </div>
+      </div>
+
+      <div class="report-filters-grid">
+        <div class="filter-field">
+          <label for="data_inicio">Data inicial</label>
+          <input type="date" id="data_inicio" name="data_inicio">
+        </div>
+
+        <div class="filter-field">
+          <label for="data_fim">Data final</label>
+          <input type="date" id="data_fim" name="data_fim">
+        </div>
+
+        <div class="report-actions">
+          <button type="button" class="btn-success" id="filtrarRelatorio">Atualizar relatório</button>
+          <button type="button" class="btn-secondary" id="limparFiltros">Limpar período</button>
+        </div>
+
+        <p class="report-feedback" id="reportFeedback" role="status">Carregando indicadores...</p>
+      </div>
+    </section>
+
+    <section class="report-metrics">
+      <article class="report-card metric-card">
+        <span class="metric-label">Faturamento</span>
+        <strong class="metric-value" id="faturamento">R$ 0,00</strong>
+        <small class="metric-note" id="faturamentoAux">0 atendimentos finalizados</small>
+      </article>
+
+      <article class="report-card metric-card">
+        <span class="metric-label">Agendamentos</span>
+        <strong class="metric-value" id="agendamentos">0</strong>
+        <small class="metric-note" id="agendamentosAux">0 registros no período</small>
+      </article>
+
+      <article class="report-card metric-card">
+        <span class="metric-label">Cancelamentos</span>
+        <strong class="metric-value" id="cancelamentos">0%</strong>
+        <small class="metric-note" id="cancelamentosAux">0 cancelamentos no período</small>
+      </article>
+
+      <article class="report-card metric-card">
+        <span class="metric-label">Ticket médio</span>
+        <strong class="metric-value" id="ticket">R$ 0,00</strong>
+        <small class="metric-note" id="ticketAux">Média por atendimento finalizado</small>
+      </article>
+    </section>
+
+    <section class="report-grid">
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Agendamentos por dia</h2>
+            <p>Evolução do volume de atendimentos no período selecionado.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper">
+          <canvas id="graficoAgendamentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Faturamento por profissional</h2>
+            <p>Veja quem mais contribuiu para o resultado.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoProfissionais"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Profissionais em destaque</h2>
+            <p>Ranking com quantidade de atendimentos e faturamento.</p>
+          </div>
+        </div>
+
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Profissional</th>
+                <th>Atendimentos</th>
+                <th>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaProfissionais">
+              <tr>
+                <td colspan="3" class="report-empty">Carregando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Serviços mais vendidos</h2>
+            <p>Distribuição por volume de atendimentos concluídos.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoServicos"></canvas>
+        </div>
+
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Serviço</th>
+                <th>Qtd.</th>
+                <th>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaServicos">
+              <tr>
+                <td colspan="3" class="report-empty">Carregando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

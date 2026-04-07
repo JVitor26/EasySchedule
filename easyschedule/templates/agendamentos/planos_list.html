@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Planos Mensais{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Recorrencia</p>
+      <h1 class="page-title">Planos mensais</h1>
+      <p class="page-subtitle">
+        Organize pacotes recorrentes com dia fixo, horario fixo e um unico pagamento cobrindo
+        todos os encontros do mes.
+      </p>
+    </div>
+
+    <div class="page-actions">
+      <a href="{% url 'planos_form' %}" class="btn btn-success">Novo plano mensal</a>
+    </div>
+  </header>
+
+  <section class="page-card">
+    <div class="page-card-header">
+      <div>
+        <h2>Carteira de pacotes</h2>
+        <p>{{ planos|length }} plano{{ planos|length|pluralize }} pronto{{ planos|length|pluralize }} para acompanhamento.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Servico</th>
+            <th>Profissional</th>
+            <th>Mes</th>
+            <th>Dia fixo</th>
+            <th>Horario</th>
+            <th>Encontros</th>
+            <th>Pagamento</th>
+            <th>Valor</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for plano in planos %}
+          <tr>
+            <td><span class="table-mobile-label">Cliente</span>{{ plano.cliente.nome }}</td>
+            <td><span class="table-mobile-label">Servico</span>{{ plano.servico.nome }}</td>
+            <td><span class="table-mobile-label">Profissional</span>{{ plano.profissional.nome }}</td>
+            <td><span class="table-mobile-label">Mes</span>{{ plano.mes_referencia|date:"m/Y" }}</td>
+            <td><span class="table-mobile-label">Dia fixo</span>{{ plano.get_dia_semana_display }}</td>
+            <td><span class="table-mobile-label">Horario</span>{{ plano.hora|time:"H:i" }}</td>
+            <td><span class="table-mobile-label">Encontros</span>{{ plano.quantidade_encontros }}</td>
+            <td>
+              <span class="table-mobile-label">Pagamento</span>
+              <span class="status-chip status-{% if plano.pagamento_status == 'pago' %}success{% elif plano.pagamento_status == 'pendente' %}warning{% else %}danger{% endif %}">
+                {{ plano.get_pagamento_status_display }}
+              </span>
+            </td>
+            <td><span class="table-mobile-label">Valor</span>R$ {{ plano.valor_mensal|floatformat:2 }}</td>
+            <td>
+              <span class="table-mobile-label">Acoes</span>
+              <div class="table-action-group">
+                <a href="{% url 'planos_edit' plano.id %}" class="btn btn-sm btn-primary">Editar</a>
+                <a href="{% url 'cliente_plano_pagamento' plano.referencia_publica %}" class="btn btn-sm btn-secondary">Checkout</a>
+                <a href="{% url 'planos_delete' plano.id %}" class="btn btn-sm btn-danger">Excluir</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="10" class="table-empty-cell">Nenhum plano mensal cadastrado para esta empresa.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

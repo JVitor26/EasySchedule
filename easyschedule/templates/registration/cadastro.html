@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Cadastro{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/login.css' %}">
+
+<section class="auth-shell">
+  <aside class="auth-stage">
+    <div class="auth-logo">
+      <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="auth-logo-image">
+      <div class="auth-logo-copy">
+        <strong>EasySchedule</strong>
+        <span>Experiencia premium para negocios de servico</span>
+      </div>
+    </div>
+
+    <div class="auth-hero">
+      <p class="auth-eyebrow">Cadastro inteligente</p>
+      <h1 class="auth-stage-title">Sua empresa entra pronta para vender horarios</h1>
+      <p class="auth-stage-copy">
+        Escolha o tipo do seu negocio e o sistema ajusta linguagem, formularios e fluxo de agendamento
+        para o seu dia a dia com acabamento visual consistente.
+      </p>
+    </div>
+
+    <div class="auth-stage-points">
+      <div class="auth-stage-point">
+        <strong>Fluxo adaptado</strong>
+        <span>Barbearia, manicure, salao e outros nichos com linguagem adequada.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Agenda organizada</strong>
+        <span>Equipe, servicos, horarios e portal do cliente em um unico sistema.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Visual premium</strong>
+        <span>Temas globais, contraste forte e leitura confortavel em todas as telas.</span>
+      </div>
+      <div class="auth-stage-point">
+        <strong>Crescimento seguro</strong>
+        <span>Estrutura multiempresa pronta para operar sem vazamento de dados.</span>
+      </div>
+    </div>
+  </aside>
+
+  <section class="auth-card">
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+
+      <div class="auth-tabs">
+        <a href="{% url 'cadastro_empresa' %}" class="auth-tab active">Cadastre-se</a>
+        <a href="{% url 'login' %}" class="auth-tab">Login</a>
+      </div>
+
+      <h2 class="auth-title" id="registrationTitle">{{ registration_profile.registration_title }}</h2>
+      <p class="auth-subtitle" id="registrationSubtitle">{{ registration_profile.registration_subtitle }}</p>
+
+      {% if form.non_field_errors %}
+      <div class="auth-form-errors">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="business-preview">
+        <span class="business-preview-label">Configuracao inicial</span>
+        <strong class="business-preview-title" id="businessPreviewTitle">{{ registration_profile.label }}</strong>
+        <p class="business-preview-text" id="businessPreviewHighlight">{{ registration_profile.registration_highlight }}</p>
+        <div class="business-preview-metrics">
+          <span class="preview-chip" id="businessPreviewProfessionals">{{ registration_profile.professional_term_plural }}</span>
+          <span class="preview-chip" id="businessPreviewServices">{{ registration_profile.service_term_plural }}</span>
+          <span class="preview-chip" id="businessPreviewAppointments">{{ registration_profile.appointment_term_plural }}</span>
+        </div>
+        <ul class="business-preview-points" id="businessPreviewPoints">
+          {% for point in registration_profile.preview_points %}
+          <li>{{ point }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_nome_completo" id="registrationOwnerLabel">{{ registration_profile.owner_name_label }}</label>
+        {{ form.nome_completo }}
+        {{ form.nome_completo.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_data_nascimento">Data de nascimento</label>
+        {{ form.data_nascimento }}
+        {{ form.data_nascimento.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_cpf_cnpj" id="registrationDocumentLabel">{{ registration_profile.document_label }}</label>
+        {{ form.cpf_cnpj }}
+        {{ form.cpf_cnpj.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_tipo_empresa">Tipo de empresa</label>
+        {{ form.tipo_empresa }}
+        {{ form.tipo_empresa.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_nome_empresa" id="registrationCompanyLabel">{{ registration_profile.company_name_label }}</label>
+        {{ form.nome_empresa }}
+        {{ form.nome_empresa.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_email">E-mail</label>
+        {{ form.email }}
+        {{ form.email.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_senha">Senha</label>
+        {{ form.senha }}
+        {{ form.senha.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_senha2">Confirmação de senha</label>
+        {{ form.senha2 }}
+        {{ form.senha2.errors }}
+      </div>
+
+      <button type="submit" class="btn-form">Cadastrar</button>
+
+      <div class="auth-footer">
+        Ja tem uma conta? <a href="{% url 'login' %}">Entrar</a>
+      </div>
+
+      <div class="auth-legal">© 2026 EasySchedule. Todos os direitos reservados.</div>
+    </form>
+  </section>
+</section>
+
+{{ business_profiles_payload|json_script:"business-profile-config" }}
+<script src="{% static 'js/cadastro_empresa.js' %}"></script>
+
+{% endblock %}

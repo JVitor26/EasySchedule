@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<div class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Pacotes</p>
+      <h1 class="page-title">{{ page_title }}</h1>
+      <p class="page-subtitle">{{ page_subtitle }}</p>
+    </div>
+  </header>
+
+  <div class="form-card">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="form-errors">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>{{ form.cliente.label }}</label>
+          {{ form.cliente }}
+          {{ form.cliente.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.profissional.label }}</label>
+          {{ form.profissional }}
+          {{ form.profissional.errors }}
+        </div>
+        <div class="form-group full">
+          <label>{{ form.servico.label }}</label>
+          {{ form.servico }}
+          {{ form.servico.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.mes_referencia.label }}</label>
+          {{ form.mes_referencia }}
+          {{ form.mes_referencia.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.dia_semana.label }}</label>
+          {{ form.dia_semana }}
+          {{ form.dia_semana.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.hora.label }}</label>
+          {{ form.hora }}
+          {{ form.hora.errors }}
+        </div>
+        <div class="form-group full">
+          <label>{{ form.observacoes.label }}</label>
+          {{ form.observacoes }}
+          {{ form.observacoes.errors }}
+        </div>
+        <div class="form-group full checkbox-group">
+          <label>{{ form.registrar_pagamento_agora }} {{ form.registrar_pagamento_agora.label }}</label>
+          {{ form.registrar_pagamento_agora.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.metodo_pagamento_inicial.label }}</label>
+          {{ form.metodo_pagamento_inicial }}
+          {{ form.metodo_pagamento_inicial.errors }}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-success">Salvar plano</button>
+        <a href="{% url 'planos_list' %}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir produto{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Exclusao</p>
+    <h1 class="confirm-title">Excluir produto</h1>
+    <p class="confirm-copy">
+      Tem certeza que deseja excluir <strong>{{ produto.nome }}</strong>? O item deixara de aparecer
+      no sistema e, se estiver publico, tambem saira da area do cliente.
+    </p>
+    <span class="confirm-highlight">R$ {{ produto.preco|floatformat:2 }} | Estoque: {{ produto.estoque }}</span>
+
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Excluir produto</button>
+      <a href="{% url 'produtos_list' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

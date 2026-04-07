@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir Agendamento{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+	<div class="confirm-card">
+		<p class="confirm-eyebrow">Exclusao</p>
+		<h1 class="confirm-title">Remover {{ business_profile.appointment_term_singular|default:"Agendamento" }}</h1>
+		<p class="confirm-copy">
+			Tem certeza que deseja excluir o horario de <strong>{{ agendamento.cliente }}</strong> para
+			<strong>{{ agendamento.servico }}</strong>? O registro deixara de aparecer no calendario e nas listagens.
+		</p>
+		<span class="confirm-highlight">{{ agendamento.data|date:"d/m/Y" }} as {{ agendamento.hora|time:"H:i" }}</span>
+
+		<form method="post" class="confirm-actions">
+			{% csrf_token %}
+			<button type="submit" class="btn btn-danger">Excluir agendamento</button>
+			<a href="{% url 'agendamentos_list' %}" class="btn btn-secondary">Cancelar</a>
+		</form>
+	</div>
+</section>
+{% endblock %}

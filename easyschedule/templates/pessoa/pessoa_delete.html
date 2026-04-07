@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir Cliente{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+	<div class="confirm-card">
+		<p class="confirm-eyebrow">Exclusao</p>
+		<h1 class="confirm-title">Remover {{ business_profile.client_term_singular|default:"Cliente" }}</h1>
+		<p class="confirm-copy">
+			Tem certeza que deseja excluir <strong>{{ pessoa.nome }}</strong>? Essa acao remove o cadastro da base
+			da empresa e pode impactar historicos associados.
+		</p>
+		<span class="confirm-highlight">{{ pessoa.email|default:"Cadastro sem e-mail informado" }}</span>
+
+		<form method="post" class="confirm-actions">
+			{% csrf_token %}
+			<button type="submit" class="btn btn-danger">Excluir cadastro</button>
+			<a href="{% url 'pessoa_list' %}" class="btn btn-secondary">Cancelar</a>
+		</form>
+	</div>
+</section>
+{% endblock %}

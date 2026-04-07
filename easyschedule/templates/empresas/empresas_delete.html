@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir Empresa{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Exclusao</p>
+    <h1 class="confirm-title">Remover empresa</h1>
+    <p class="confirm-copy">
+      Tem certeza que deseja excluir esta empresa? Esta tela foi alinhada ao mesmo padrao visual premium
+      do restante do sistema para manter a experiencia consistente.
+    </p>
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Excluir empresa</button>
+      <a href="{% url 'dashboard_home' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Produtos{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Vitrine</p>
+      <h1 class="page-title">Produtos</h1>
+      <p class="page-subtitle">
+        Organize os produtos da sua empresa com foto, estoque, valor e especificacoes para vender
+        com o mesmo padrao premium do restante do sistema.
+      </p>
+    </div>
+
+    <div class="page-actions">
+      <a href="{% url 'produtos_form' %}" class="btn btn-success">Novo produto</a>
+    </div>
+  </header>
+
+  <section class="page-card">
+    <div class="page-card-header">
+      <div>
+        <h2>Catalogo de venda</h2>
+        <p>{{ produtos|length }} produto{{ produtos|length|pluralize }} cadastrado{{ produtos|length|pluralize }} para a empresa.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Foto</th>
+            <th>Nome</th>
+            <th>Categoria</th>
+            <th>Descricao</th>
+            <th>Preco</th>
+            <th>Estoque</th>
+            <th>Status</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for produto in produtos %}
+          <tr>
+            <td>
+              <span class="table-mobile-label">Foto</span>
+              {% if produto.foto %}
+              <img src="{{ produto.foto.url }}" alt="{{ produto.nome }}" class="table-thumb">
+              {% else %}
+              <span class="badge-soft">Sem foto</span>
+              {% endif %}
+            </td>
+            <td><span class="table-mobile-label">Nome</span>{{ produto.nome }}</td>
+            <td><span class="table-mobile-label">Categoria</span>{{ produto.categoria|default:"-" }}</td>
+            <td><span class="table-mobile-label">Descricao</span>{{ produto.descricao|default:"-"|truncatechars:90 }}</td>
+            <td><span class="table-mobile-label">Preco</span>R$ {{ produto.preco|floatformat:2 }}</td>
+            <td><span class="table-mobile-label">Estoque</span>{{ produto.estoque }}</td>
+            <td>
+              <span class="table-mobile-label">Status</span>
+              <span class="status-chip {% if produto.ativo %}status-ativo{% else %}status-inativo{% endif %}">
+                {% if produto.ativo %}Ativo{% else %}Inativo{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="table-mobile-label">Acoes</span>
+              <div class="table-action-group">
+                <a href="{% url 'produtos_edit' produto.id %}" class="btn btn-sm btn-primary">Editar</a>
+                <a href="{% url 'produtos_delete' produto.id %}" class="btn btn-sm btn-danger">Excluir</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="8" class="table-empty-cell">Nenhum produto cadastrado para esta empresa.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

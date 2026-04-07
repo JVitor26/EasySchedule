@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}pessoas{% endblock %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container">
+    <header class="page-hero">
+        <div class="page-copy">
+            <p class="page-eyebrow">Relacionamento</p>
+            <h1 class="page-title">{{ business_profile.client_term_plural|default:"Clientes" }}</h1>
+            <p class="page-subtitle">
+                Organize a base de {{ business_profile.client_term_plural|default:"clientes" }} com dados claros,
+                historico centralizado e leitura confortavel em qualquer tema.
+            </p>
+        </div>
+
+        <div class="page-actions">
+            <a href="{% url 'pessoa_form' %}" class="btn btn-success">Novo {{ business_profile.client_term_singular|default:"Cliente" }}</a>
+        </div>
+    </header>
+
+    <section class="page-card">
+        <div class="page-card-header">
+            <div>
+                <h2>Base ativa</h2>
+                <p>{{ pessoas|length }} cadastro{{ pessoas|length|pluralize }} registrado{{ pessoas|length|pluralize }} para agendamento e relacionamento.</p>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Email</th>
+                        <th>Telefone</th>
+                        <th>Documento</th>
+                        <th>Data de nascimento</th>
+                        <th>Endereco</th>
+                        <th>Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pessoa in pessoas %}
+                    <tr>
+                        <td><span class="table-mobile-label">Nome</span>{{ pessoa.nome }}</td>
+                        <td><span class="table-mobile-label">Email</span>{{ pessoa.email_formatado }}</td>
+                        <td><span class="table-mobile-label">Telefone</span>{{ pessoa.telefone_formatado }}</td>
+                        <td><span class="table-mobile-label">Documento</span>{{ pessoa.documento_formatado }}</td>
+                        <td><span class="table-mobile-label">Data de nascimento</span>{{ pessoa.data_nascimento_br }}</td>
+                        <td><span class="table-mobile-label">Endereco</span>{{ pessoa.endereco|default:"-" }}</td>
+                        <td>
+                            <span class="table-mobile-label">Acoes</span>
+                            <div class="table-action-group">
+                                <a href="{% url 'pessoa_edit' pessoa.id %}" class="btn btn-sm btn-primary">Editar</a>
+                                <a href="{% url 'pessoa_delete' pessoa.id %}" class="btn btn-sm btn-danger">Excluir</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr class="empty-row">
+                        <td colspan="7" class="table-empty-cell">Nenhum cadastro encontrado para esta empresa.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+
+{% endblock %}

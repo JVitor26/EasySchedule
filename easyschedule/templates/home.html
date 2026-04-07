@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}EasySchedule - Início{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="page-eyebrow">Inicio</p>
+    <h1 class="confirm-title">Bem-vindo ao EasySchedule</h1>
+    <p class="confirm-copy">
+      Sistema de agendamento multiempresa com portal do cliente, operacao interna padronizada
+      e temas visuais consistentes do cadastro ao dashboard.
+    </p>
+    <div class="confirm-actions">
+      <a href="{% url 'cliente_home' %}" class="btn btn-success">Explorar area do cliente</a>
+      <a href="{% url 'login' %}" class="btn btn-secondary">Entrar no sistema</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

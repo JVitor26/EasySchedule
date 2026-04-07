@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Nova Empresa{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container">
+    <header class="page-hero">
+        <div class="page-copy">
+            <p class="page-eyebrow">Empresa</p>
+            <h1 class="page-title">Nova empresa</h1>
+            <p class="page-subtitle">Cadastre uma empresa com o mesmo acabamento visual aplicado ao restante do sistema.</p>
+        </div>
+    </header>
+
+    <div class="form-card">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="form-actions">
+                <button type="submit" class="btn btn-success">Salvar</button>
+                <a href="{% url 'dashboard_home' %}" class="btn btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+{% endblock %}

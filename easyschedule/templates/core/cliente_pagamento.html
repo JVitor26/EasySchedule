@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Pagamento - {{ empresa.nome }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
+
+<section class="client-payment-page">
+  <div class="client-company-shell">
+    <header class="client-company-hero">
+      <div>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">Voltar para a empresa</a>
+        <p class="client-eyebrow">Checkout do cliente</p>
+        <h1>{% if checkout_kind == "plano" %}Pague seu pacote mensal{% else %}Pague seu horario pelo aplicativo{% endif %}</h1>
+        <p class="client-subtitle">
+          {% if checkout_kind == "plano" %}
+          Revise os dados do pacote, confira o dia fixo do mes e conclua um unico pagamento cobrindo todos os encontros.
+          {% else %}
+          Revise os dados da reserva, escolha o metodo de pagamento e conclua a confirmacao sem sair do sistema.
+          {% endif %}
+        </p>
+      </div>
+      <div class="client-company-badges">
+        <span class="preview-chip">{{ empresa.nome }}</span>
+        <span class="preview-chip">
+          {% if checkout_kind == "plano" %}
+          {{ checkout.get_pagamento_status_display }}
+          {% else %}
+          {{ checkout.get_status_display }}
+          {% endif %}
+        </span>
+      </div>
+    </header>
+
+    <section class="client-payment-layout">
+      <article class="client-panel client-payment-summary">
+        <div class="client-panel-header">
+          <div>
+            <h2>{% if checkout_kind == "plano" %}Resumo do pacote{% else %}Resumo da reserva{% endif %}</h2>
+            <p>
+              {% if checkout_kind == "plano" %}
+              Detalhes do pacote mensal vinculado a este pagamento.
+              {% else %}
+              Detalhes do atendimento vinculado a este pagamento.
+              {% endif %}
+            </p>
+          </div>
+        </div>
+
+        <div class="payment-summary-grid">
+          <div class="payment-summary-item">
+            <span>Cliente</span>
+            <strong>{{ cliente.nome }}</strong>
+          </div>
+          <div class="payment-summary-item">
+            <span>Servico</span>
+            <strong>{% if checkout_kind == "plano" %}{{ plano.servico.nome }}{% else %}{{ agendamento.servico.nome }}{% endif %}</strong>
+          </div>
+          <div class="payment-summary-item">
+            <span>Profissional</span>
+            <strong>{% if checkout_kind == "plano" %}{{ plano.profissional.nome }}{% else %}{{ agendamento.profissional.nome }}{% endif %}</strong>
+          </div>
+          {% if checkout_kind == "plano" %}
+          <div class="payment-summary-item">
+            <span>Mes e recorrencia</span>
+            <strong>{{ plano.mes_referencia|date:"m/Y" }} | {{ plano.get_dia_semana_display }} as {{ plano.hora|time:"H:i" }}</strong>
+          </div>
+          <div class="payment-summary-item">
+            <span>Encontros do mes</span>
+            <strong>{{ plano.quantidade_encontros }} encontro{{ plano.quantidade_encontros|pluralize }}</strong>
+          </div>
+          {% else %}
+          <div class="payment-summary-item">
+            <span>Data e hora</span>
+            <strong>{{ agendamento.data|date:"d/m/Y" }} as {{ agendamento.hora|time:"H:i" }}</strong>
+          </div>
+          {% endif %}
+          <div class="payment-summary-item">
+            <span>Referencia</span>
+            <strong>{{ checkout.referencia_pagamento }}</strong>
+          </div>
+          <div class="payment-summary-item payment-summary-item-accent">
+            <span>Valor total</span>
+            <strong>R$ {{ checkout_total|floatformat:2 }}</strong>
+          </div>
+        </div>
+
+        <div class="payment-code-card">
+          <span class="payment-code-label">Codigo Pix interno</span>
+          <strong id="pixCode">{{ checkout.codigo_pix }}</strong>
+          <button type="button" class="btn btn-secondary payment-copy-btn" data-copy-target="pixCode">Copiar codigo</button>
+        </div>
+      </article>
+
+      <article class="client-booking-card client-payment-card">
+        <div class="client-panel-header">
+          <div>
+            <h2>Finalizar pagamento</h2>
+            <p>
+              {% if payment_success %}
+              {% if checkout_kind == "plano" %}
+              Pagamento concluido. Todos os encontros do pacote ficaram cobertos no sistema.
+              {% else %}
+              Pagamento concluido. Seu horario ja esta confirmado no sistema.
+              {% endif %}
+              {% else %}
+              Escolha entre Pix ou cartao e conclua agora mesmo pelo checkout do aplicativo.
+              {% endif %}
+            </p>
+          </div>
+        </div>
+
+        {% if payment_success %}
+        <div class="client-success-card payment-success-card">
+          <h2>Pagamento concluido</h2>
+          <p>
+            {% if checkout_kind == "plano" %}
+            O pagamento foi registrado com sucesso e o pacote mensal de {{ cliente.nome }} ficou pago para
+            todo o mes {{ plano.mes_referencia|date:"m/Y" }}.
+            {% else %}
+            O pagamento foi registrado com sucesso e o horario de {{ cliente.nome }} ficou confirmado para
+            {{ agendamento.data|date:"d/m/Y" }} as {{ agendamento.hora|time:"H:i" }}.
+            {% endif %}
+          </p>
+          <div class="client-success-actions">
+            <a class="btn-success" href="{% url 'cliente_empresa' empresa.id %}">Voltar para a empresa</a>
+          </div>
+        </div>
+        {% else %}
+        <form method="post" class="client-booking-form" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="client-form-errors">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="client-payment-methods">
+            {% for radio in form.metodo %}
+            <label class="payment-method-option">
+              {{ radio.tag }}
+              <span class="payment-method-copy">
+                <strong>{{ radio.choice_label }}</strong>
+                <small>
+                  {% if radio.choice_label == "Pix" %}
+                  Conclua usando o codigo Pix exibido acima.
+                  {% else %}
+                  Confirme um checkout interno com validacao dos 4 ultimos digitos.
+                  {% endif %}
+                </small>
+              </span>
+            </label>
+            {% endfor %}
+            {{ form.metodo.errors }}
+          </div>
+
+          <div class="client-form-grid client-payment-form-grid">
+            <div class="client-form-group">
+              <label>{{ form.nome_pagador.label }}</label>
+              {{ form.nome_pagador }}
+              {{ form.nome_pagador.errors }}
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.ultimos_digitos.label }}</label>
+              {{ form.ultimos_digitos }}
+              {{ form.ultimos_digitos.errors }}
+            </div>
+            <div class="client-form-group client-form-group-full payment-terms-group">
+              <label class="payment-checkbox-label">{{ form.aceitar_termos }} {{ form.aceitar_termos.label }}</label>
+              {{ form.aceitar_termos.errors }}
+            </div>
+          </div>
+
+          <div class="client-form-actions">
+            <button type="submit" class="btn-success">Confirmar pagamento</button>
+          </div>
+
+          <p class="payment-disclaimer">
+            Checkout interno pronto para integracao com gateway real. O registro do pagamento fica salvo no sistema e confirma automaticamente
+            {% if checkout_kind == "plano" %}todo o pacote do mes{% else %}o horario{% endif %}.
+          </p>
+        </form>
+        {% endif %}
+      </article>
+    </section>
+  </div>
+</section>
+
+<script src="{% static 'js/client_portal.js' %}"></script>
+{% endblock %}

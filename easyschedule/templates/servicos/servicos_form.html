@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<div class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Cadastro</p>
+      <h1 class="page-title">{{ page_title }}</h1>
+      <p class="page-subtitle">{{ page_subtitle }}</p>
+    </div>
+  </header>
+
+  <div class="form-card">
+    <form method="post">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+      <div class="form-errors">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="form-grid">
+        <div class="form-group">
+          <label>{{ form.nome.label }}</label>
+          {{ form.nome }}
+          {{ form.nome.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.categoria.label }}</label>
+          {{ form.categoria }}
+          {% if form.categoria.help_text %}<small class="field-help">{{ form.categoria.help_text }}</small>{% endif %}
+          {{ form.categoria.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.preco.label }}</label>
+          {{ form.preco }}
+          {{ form.preco.errors }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.tempo.label }}</label>
+          {{ form.tempo }}
+          {{ form.tempo.errors }}
+        </div>
+        <div class="form-group full">
+          <label>{{ form.descricao.label }}</label>
+          {{ form.descricao }}
+          {{ form.descricao.errors }}
+        </div>
+        <div class="form-group full checkbox-group">
+          <label>{{ form.ativo }} {{ form.ativo.label }}</label>
+          {{ form.ativo.errors }}
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-success">Salvar</button>
+        <a href="{% url 'servicos_list' %}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

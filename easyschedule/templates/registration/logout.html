@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Logout | EasySchedule{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="page-eyebrow">Sessao encerrada</p>
+    <h1 class="confirm-title">Voce saiu do sistema</h1>
+    <p class="confirm-copy">
+      Sua sessao foi finalizada com seguranca. Quando quiser voltar, entre novamente para continuar a operacao.
+    </p>
+    <div class="confirm-actions">
+      <a href="{% url 'login' %}" class="btn btn-success">Entrar novamente</a>
+      <a href="{% url 'cliente_home' %}" class="btn btn-secondary">Ir para area do cliente</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Profissionais{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Equipe</p>
+      <h1 class="page-title">{{ business_profile.professional_term_plural|default:"Profissionais" }}</h1>
+      <p class="page-subtitle">
+        Gerencie a equipe com especialidade, contato e status de disponibilidade sem perder clareza visual
+        entre desktop e celular.
+      </p>
+    </div>
+
+    <div class="page-actions">
+      <a href="{% url 'profissionais_form' %}" class="btn btn-success">Novo {{ business_profile.professional_term_singular|default:"Profissional" }}</a>
+    </div>
+  </header>
+
+  <section class="page-card">
+    <div class="page-card-header">
+      <div>
+        <h2>Equipe cadastrada</h2>
+        <p>{{ profissionais|length }} profissional{{ profissionais|length|pluralize }} registrado{{ profissionais|length|pluralize }} na empresa.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Especialidade</th>
+            <th>Telefone</th>
+            <th>Email</th>
+            <th>CPF</th>
+            <th>Data de nascimento</th>
+            <th>Endereco</th>
+            <th>Status</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for profissional in profissionais %}
+          <tr>
+            <td><span class="table-mobile-label">Nome</span>{{ profissional.nome }}</td>
+            <td><span class="table-mobile-label">Especialidade</span>{{ profissional.especialidade|default:"-" }}</td>
+            <td><span class="table-mobile-label">Telefone</span>{{ profissional.telefone|default:"-" }}</td>
+            <td><span class="table-mobile-label">Email</span>{{ profissional.email|default:"-" }}</td>
+            <td><span class="table-mobile-label">CPF</span>{{ profissional.cpf|default:"-" }}</td>
+            <td><span class="table-mobile-label">Data de nascimento</span>{{ profissional.data_nascimento|date:"d/m/Y"|default:"-" }}</td>
+            <td><span class="table-mobile-label">Endereco</span>{{ profissional.endereco|default:"-" }}</td>
+            <td>
+              <span class="table-mobile-label">Status</span>
+              <span class="status-chip {% if profissional.ativo %}status-ativo{% else %}status-inativo{% endif %}">
+                {% if profissional.ativo %}Ativo{% else %}Inativo{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="table-mobile-label">Acoes</span>
+              <div class="table-action-group">
+                <a href="{% url 'profissionais_edit' profissional.id %}" class="btn btn-sm btn-primary">Editar</a>
+                <a href="{% url 'profissionais_delete' profissional.id %}" class="btn btn-sm btn-danger">Excluir</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="9" class="table-empty-cell">Nenhum profissional cadastrado para esta empresa.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

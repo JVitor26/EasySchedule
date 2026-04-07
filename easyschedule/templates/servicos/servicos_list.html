@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Serviços{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<section class="page-container">
+  <header class="page-hero">
+    <div class="page-copy">
+      <p class="page-eyebrow">Catalogo</p>
+      <h1 class="page-title">{{ business_profile.service_term_plural|default:"Servicos" }}</h1>
+      <p class="page-subtitle">
+        Centralize valores, categorias, duracao e disponibilidade dos {{ business_profile.service_term_plural|default:"servicos" }}
+        mantendo o mesmo padrao visual do restante da operacao.
+      </p>
+    </div>
+
+    <div class="page-actions">
+      <a href="{% url 'servicos_form' %}" class="btn btn-success">Novo {{ business_profile.service_term_singular|default:"Servico" }}</a>
+    </div>
+  </header>
+
+  <section class="page-card">
+    <div class="page-card-header">
+      <div>
+        <h2>Oferta atual</h2>
+        <p>{{ servicos|length }} item{{ servicos|length|pluralize }} cadastrado{{ servicos|length|pluralize }} para sua agenda.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Categoria</th>
+            <th>Descricao</th>
+            <th>Preco</th>
+            <th>Duracao</th>
+            <th>Status</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for servico in servicos %}
+          <tr>
+            <td><span class="table-mobile-label">Nome</span>{{ servico.nome }}</td>
+            <td><span class="table-mobile-label">Categoria</span>{{ servico.categoria }}</td>
+            <td><span class="table-mobile-label">Descricao</span>{{ servico.descricao|default:"-" }}</td>
+            <td><span class="table-mobile-label">Preco</span>R$ {{ servico.preco|floatformat:2 }}</td>
+            <td><span class="table-mobile-label">Duracao</span>{{ servico.tempo }} min</td>
+            <td>
+              <span class="table-mobile-label">Status</span>
+              <span class="status-chip {% if servico.ativo %}status-ativo{% else %}status-inativo{% endif %}">
+                {% if servico.ativo %}Ativo{% else %}Inativo{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="table-mobile-label">Acoes</span>
+              <div class="table-action-group">
+                <a href="{% url 'servicos_edit' servico.id %}" class="btn btn-sm btn-primary">Editar</a>
+                <a href="{% url 'servicos_delete' servico.id %}" class="btn btn-sm btn-danger">Excluir</a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr class="empty-row">
+            <td colspan="7" class="table-empty-cell">Nenhum servico cadastrado para esta empresa.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+ {% endblock %}

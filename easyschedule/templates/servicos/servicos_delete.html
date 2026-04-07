@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir Serviço{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Exclusao</p>
+    <h1 class="confirm-title">Remover {{ business_profile.service_term_singular|default:"Servico" }}</h1>
+    <p class="confirm-copy">
+      Tem certeza que deseja excluir <strong>{{ servico.nome }}</strong>? O item deixara de aparecer na agenda
+      e em novos atendimentos da empresa.
+    </p>
+    <span class="confirm-highlight">Duracao: {{ servico.tempo }} min</span>
+
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Excluir servico</button>
+      <a href="{% url 'servicos_list' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

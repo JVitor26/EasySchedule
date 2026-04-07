@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir plano mensal{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Exclusao</p>
+    <h1 class="confirm-title">Excluir plano mensal</h1>
+    <p class="confirm-copy">
+      Tem certeza que deseja excluir o plano mensal de <strong>{{ plano.cliente.nome }}</strong> para
+      {{ plano.servico.nome }}? Todos os encontros gerados por esse pacote tambem serao removidos.
+    </p>
+    <span class="confirm-highlight">{{ plano.get_dia_semana_display }} as {{ plano.hora|time:"H:i" }} no mes {{ plano.mes_referencia|date:"m/Y" }}</span>
+
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Excluir plano</button>
+      <a href="{% url 'planos_list' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

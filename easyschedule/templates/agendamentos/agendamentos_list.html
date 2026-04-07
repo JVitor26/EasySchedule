@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Agendamentos{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+
+<section class="page-container">
+	<header class="page-hero">
+		<div class="page-copy">
+			<p class="page-eyebrow">Operacao</p>
+			<h1 class="page-title">{{ business_profile.appointment_term_plural|default:"Agendamentos" }}</h1>
+			<p class="page-subtitle">
+				Veja a fila completa de atendimento com status, horario, forma de pagamento e atalhos de edicao
+				em uma tabela visualmente padronizada.
+			</p>
+		</div>
+
+		<div class="page-actions">
+			<a href="{% url 'agendamentos_form' %}" class="btn btn-success">Novo {{ business_profile.appointment_term_singular|default:"Agendamento" }}</a>
+		</div>
+	</header>
+
+	<section class="page-card">
+		<div class="page-card-header">
+			<div>
+				<h2>Lista operacional</h2>
+				<p>{{ agendamentos|length }} registro{{ agendamentos|length|pluralize }} pronto{{ agendamentos|length|pluralize }} para consulta e ajuste.</p>
+			</div>
+		</div>
+
+		<div class="table-wrap">
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Cliente</th>
+						<th>Servico</th>
+						<th>Profissional</th>
+						<th>Data</th>
+						<th>Hora</th>
+						<th>Status</th>
+						<th>Status do pagamento</th>
+						<th>Metodo</th>
+						<th>Acoes</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for agendamento in agendamentos %}
+					<tr>
+						<td><span class="table-mobile-label">Cliente</span>{{ agendamento.cliente }}</td>
+						<td>
+							<span class="table-mobile-label">Servico</span>
+							{{ agendamento.servico }}
+							{% if agendamento.plano_id %}
+							<br><span class="badge-soft">Pacote mensal</span>
+							{% endif %}
+						</td>
+						<td><span class="table-mobile-label">Profissional</span>{{ agendamento.profissional }}</td>
+						<td><span class="table-mobile-label">Data</span>{{ agendamento.data|date:"d/m/Y" }}</td>
+						<td><span class="table-mobile-label">Hora</span>{{ agendamento.hora|time:"H:i" }}</td>
+						<td>
+							<span class="table-mobile-label">Status</span>
+							<span class="status-chip status-{{ agendamento.status }}">{{ agendamento.get_status_display }}</span>
+						</td>
+						<td>
+							<span class="table-mobile-label">Pagamento</span>
+							<span class="status-chip status-{{ agendamento.payment_status_code }}">
+								{{ agendamento.payment_status_label }}
+							</span>
+						</td>
+						<td><span class="table-mobile-label">Metodo</span>{{ agendamento.payment_method_label }}</td>
+						<td>
+							<span class="table-mobile-label">Acoes</span>
+							<div class="table-action-group">
+								{% if agendamento.plano_id %}
+								<a href="{% url 'planos_edit' agendamento.plano_id %}" class="btn btn-sm btn-primary">Editar plano</a>
+								<a href="{% url 'planos_delete' agendamento.plano_id %}" class="btn btn-sm btn-danger">Excluir plano</a>
+								{% else %}
+								<a href="{% url 'agendamentos_edit' agendamento.id %}" class="btn btn-sm btn-primary">Editar</a>
+								<a href="{% url 'agendamentos_delete' agendamento.id %}" class="btn btn-sm btn-danger">Excluir</a>
+								{% endif %}
+							</div>
+						</td>
+					</tr>
+					{% empty %}
+					<tr class="empty-row">
+						<td colspan="9" class="table-empty-cell">Nenhum agendamento cadastrado para esta empresa.</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+	</section>
+</section>
+{% endblock %}
