@@ -14,14 +14,10 @@ DEBUG = False
 
 ALLOWED_HOSTS = [
     'easyschedule-0j0e.onrender.com',
-    '127.0.0.1',
-    'localhost',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://easyschedule-0j0e.onrender.com',
-    'http://127.0.0.1:8000',
-    'http://localhost:8000',
 ]
 
 
