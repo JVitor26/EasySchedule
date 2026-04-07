@@ -3,22 +3,56 @@ import os
 import dj_database_url
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load only this project's .env to prevent accidental parent-directory overrides.
+if os.environ.get("RENDER", "").lower() != "true":
+    load_dotenv(BASE_DIR / ".env")
+
+
+def _env_list(name, default=""):
+    raw = os.environ.get(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _host_to_csrf_origins(host):
+    clean_host = host.strip()
+    if not clean_host:
+        return []
+
+    wildcard = clean_host.startswith(".")
+    if wildcard:
+        clean_host = f"*{clean_host}"
+
+    if clean_host in {"localhost", "127.0.0.1"}:
+        return [f"http://{clean_host}", f"https://{clean_host}"]
+
+    return [f"https://{clean_host}"]
 
 # 🔐 Segurança
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key')
 
-DEBUG = False
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = [
-    'easyschedule-0j0e.onrender.com',
-]
+ALLOWED_HOSTS = _env_list(
+    "ALLOWED_HOSTS",
+    "easyschedule-0j0e.onrender.com,.onrender.com,localhost,127.0.0.1",
+)
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://easyschedule-0j0e.onrender.com',
-]
+render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
+if render_hostname and render_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_hostname)
+
+CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
+if not CSRF_TRUSTED_ORIGINS:
+    for host in ALLOWED_HOSTS:
+        CSRF_TRUSTED_ORIGINS.extend(_host_to_csrf_origins(host))
+
+if render_hostname:
+    CSRF_TRUSTED_ORIGINS.extend(_host_to_csrf_origins(render_hostname))
+
+# Keep insertion order while removing duplicates.
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(CSRF_TRUSTED_ORIGINS))
 
 
 # 🔧 Aplicações
