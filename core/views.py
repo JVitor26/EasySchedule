@@ -737,6 +737,7 @@ def api_carrinho_listar(request, empresa_id):
     # Enriquecer carrinho com dados do banco
     itens = []
     total_preco = 0
+    ids_invalidos = []
     
     for produto_id_str, item in carrinho.items():
         try:
@@ -752,7 +753,9 @@ def api_carrinho_listar(request, empresa_id):
             })
             total_preco += preco_total
         except Produto.DoesNotExist:
-            del carrinho[produto_id_str]
+            ids_invalidos.append(produto_id_str)
+    for pid in ids_invalidos:
+        del carrinho[pid]
     
     request.session[carrinho_key] = carrinho
     request.session.modified = True
@@ -1142,7 +1145,7 @@ def stripe_checkout_agendamento_api(request, pagamento_id):
 	
 	if request.method == "GET":
 		try:
-			session_id = create_checkout_session(
+			result = create_checkout_session(
 				pagamento,
 				payment_type="agendamento",
 				request=request
@@ -1150,8 +1153,8 @@ def stripe_checkout_agendamento_api(request, pagamento_id):
 			
 			return JsonResponse({
 				"status": "sucesso",
-				"session_id": session_id,
-				"checkout_url": f"https://checkout.stripe.com/pay/{session_id}",
+				"session_id": result["session_id"],
+				"checkout_url": result["checkout_url"],
 				"public_key": settings.STRIPE_PUBLIC_KEY,
 			})
 		except StripeCheckoutError as e:
@@ -1178,7 +1181,7 @@ def stripe_checkout_plano_api(request, plano_id):
 	
 	if request.method == "GET":
 		try:
-			session_id = create_checkout_session(
+			result = create_checkout_session(
 				plano,
 				payment_type="plano",
 				request=request
@@ -1186,8 +1189,8 @@ def stripe_checkout_plano_api(request, plano_id):
 			
 			return JsonResponse({
 				"status": "sucesso",
-				"session_id": session_id,
-				"checkout_url": f"https://checkout.stripe.com/pay/{session_id}",
+				"session_id": result["session_id"],
+				"checkout_url": result["checkout_url"],
 				"public_key": settings.STRIPE_PUBLIC_KEY,
 			})
 		except StripeCheckoutError as e:

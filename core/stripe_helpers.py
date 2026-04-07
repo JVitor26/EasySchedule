@@ -47,7 +47,7 @@ def create_checkout_session(
 		request: Django request object (to build URLs if return_url not provided)
 	
 	Returns:
-		Stripe Checkout Session ID (session.id)
+		dict with 'session_id' and 'checkout_url'
 		
 	Raises:
 		StripeCheckoutError: If session creation fails
@@ -115,7 +115,7 @@ def create_checkout_session(
 		# Create StripeTransaction record for tracking
 		_create_stripe_transaction_from_session(payment_obj, session, payment_type)
 		
-		return session.id
+		return {"session_id": session.id, "checkout_url": session.url}
 		
 	except stripe.error.CardError as e:
 		raise StripeCheckoutError(f"Card error: {e.user_message}")
