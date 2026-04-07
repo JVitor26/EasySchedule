@@ -8,7 +8,7 @@ SECRET_KEY = 'django-insecure-!5=_&b*w43*7g8oid=)_4ldm#p((cte)6i2)2w!0-&fk196&9f
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['easyschedule-0j0e.onrender.com']
 
 
 # 🔧 Aplicações
