@@ -43,7 +43,8 @@ render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
 if render_hostname and render_hostname not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(render_hostname)
 
-# 🔐 CSRF + COOKIES (CORREÇÃO DEFINITIVA RENDER)
+# 🔐 CSRF + COOKIES
+IS_RENDER = bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip())
 
 CSRF_TRUSTED_ORIGINS = [
     "https://easyschedule-0j0e.onrender.com",
@@ -52,16 +53,11 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-IS_RENDER = bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip())
-
-CSRF_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
-SESSION_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
-
-CSRF_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
-SESSION_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
-
 CSRF_COOKIE_SECURE = IS_RENDER
 SESSION_COOKIE_SECURE = IS_RENDER
+
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
 
 # 🔧 Aplicações
 INSTALLED_APPS = [
