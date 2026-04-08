@@ -52,7 +52,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-IS_RENDER = os.environ.get("RENDER", "").lower() == "true"
+IS_RENDER = bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip())
 
 CSRF_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
 SESSION_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
@@ -60,8 +60,8 @@ SESSION_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
 CSRF_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
 SESSION_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
 
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = IS_RENDER
+SESSION_COOKIE_SECURE = IS_RENDER
 
 # 🔧 Aplicações
 INSTALLED_APPS = [
