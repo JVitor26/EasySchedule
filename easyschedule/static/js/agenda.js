@@ -4,6 +4,17 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
+    if (typeof window.FullCalendar === "undefined") {
+        const calendarEl = document.getElementById("calendar");
+        if (calendarEl) {
+            calendarEl.innerHTML =
+                '<p style="padding:2rem;text-align:center;color:var(--color-text-muted,#888);">' +
+                "Não foi possível carregar o calendário. Verifique sua conexão e recarregue a página." +
+                "</p>";
+        }
+        return;
+    }
+
     const eventsUrl = agendaPage.dataset.eventsUrl;
     const moveUrlTemplate = agendaPage.dataset.moveUrlTemplate;
     const editUrlTemplate = agendaPage.dataset.editUrlTemplate;

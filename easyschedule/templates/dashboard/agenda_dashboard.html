@@ -240,6 +240,15 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/dist/index.global.min.js" onerror="console.warn('FullCalendar library failed to load from CDN');"></script>
+<script>
+  window._fcLoadError = false;
+</script>
+<script
+  src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/dist/index.global.min.js"
+  onerror="window._fcLoadError = true; console.warn('FullCalendar CDN falhou. Calendário indisponível.');">
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js"
+  onerror="console.warn('FullCalendar fallback CDN também falhou.');">
+</script>
 <script src="{% static 'js/agenda.js' %}"></script>
 {% endblock %}
