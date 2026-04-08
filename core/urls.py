@@ -5,6 +5,7 @@ urlpatterns = [
     path('service-worker.js', views.service_worker_js, name='service_worker_js'),
     path('accounts/recuperar-senha/', views.password_recovery_request, name='password_recovery_request'),
     path('accounts/recuperar-senha/confirmar/', views.password_recovery_confirm, name='password_recovery_confirm'),
+    path('accounts/login-redirect/', views.login_redirect, name='login_redirect'),
     path('', views.home, name='home'),
     path('cliente/', views.home, name='cliente_home'),
     path('cliente/empresa/<int:empresa_id>/', views.empresa_detail, name='cliente_empresa'),

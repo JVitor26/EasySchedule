@@ -1,6 +1,7 @@
 from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth import logout
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render, redirect
@@ -19,6 +20,7 @@ from agendamentos.plans import list_monthly_available_slots
 from empresas.business_profiles import get_business_profile
 from empresas.models import Empresa
 from empresas.permissions import is_global_admin
+from empresas.tenancy import get_active_empresa
 from empresas.tenancy import get_accessible_empresas
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
@@ -39,10 +41,35 @@ def home(request):
     if request.user.is_authenticated:
         empresas = get_accessible_empresas(request)
         template = "core/cliente_portal.html"
+        context = {"empresas": empresas}
+    elif getattr(request, "resolver_match", None) and request.resolver_match.url_name == "home":
+        template = "home.html"
+        context = {}
     else:
         empresas = Empresa.objects.all().order_by("nome")
         template = "core/cliente_publico.html"
-    return render(request, template, {"empresas": empresas})
+        context = {"empresas": empresas}
+    return render(request, template, context)
+
+
+def login_redirect(request):
+    if not request.user.is_authenticated:
+        return redirect("login")
+
+    profissional = getattr(request.user, "profissional_profile", None)
+    if profissional and not profissional.empresa.permite_acesso_profissional:
+        logout(request)
+        messages.error(
+            request,
+            "Esta empresa utiliza o plano somente administrador. Funcionarios nao possuem acesso ao sistema.",
+        )
+        return redirect("login")
+
+    empresa = get_active_empresa(request)
+    if empresa:
+        return redirect("dashboard_home")
+
+    return redirect("cadastro_empresa")
 
 
 def _enforce_company_portal_access(request, empresa):

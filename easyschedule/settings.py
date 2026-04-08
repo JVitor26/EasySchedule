@@ -46,12 +46,10 @@ if render_hostname and render_hostname not in ALLOWED_HOSTS:
 # 🔐 CSRF + COOKIES
 IS_RENDER = bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip())
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://easyschedule-0j0e.onrender.com",
-    "https://*.onrender.com",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
+CSRF_TRUSTED_ORIGINS = _env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "https://easyschedule-0j0e.onrender.com,https://*.onrender.com,http://localhost:8000,http://127.0.0.1:8000",
+)
 
 CSRF_COOKIE_SECURE = IS_RENDER
 SESSION_COOKIE_SECURE = IS_RENDER
@@ -167,7 +165,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # 🔑 Login / Logout
 LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
+LOGIN_REDIRECT_URL = '/accounts/login-redirect/'    
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 

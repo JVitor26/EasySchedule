@@ -14,6 +14,50 @@ from profissionais.models import Profissional
 from servicos.models import Servico
 
 
+class HomepageRoutingTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="empresa-home@example.com",
+            email="empresa-home@example.com",
+            password="senha-forte-123",
+        )
+        self.empresa = Empresa.objects.create(
+            usuario=self.owner,
+            nome="Barbearia Teste",
+            tipo="barbearia",
+            cnpj="12345678000100",
+        )
+
+    def test_root_home_renders_landing_page(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "home.html")
+        self.assertContains(response, "Bem-vindo ao EasySchedule")
+        self.assertNotContains(response, "Nenhuma empresa publicada ainda.")
+
+    def test_cliente_home_renders_public_company_list(self):
+        response = self.client.get(reverse("cliente_home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "core/cliente_publico.html")
+        self.assertContains(response, self.empresa.nome)
+
+    def test_login_redirect_goes_to_dashboard_for_company_owner(self):
+        response = self.client.post(
+            reverse("login"),
+            {
+                "username": self.owner.username,
+                "password": "senha-forte-123",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRedirects(response, reverse("dashboard_home"), fetch_redirect_response=False)
+        self.assertContains(response, "Agenda")
+
+
 class PublicCustomerBookingTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(
