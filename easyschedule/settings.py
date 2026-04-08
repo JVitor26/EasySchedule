@@ -36,7 +36,7 @@ DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = _env_list(
     "ALLOWED_HOSTS",
-    "easyschedule-0j0e.onrender.com,.onrender.com,localhost,127.0.0.1",
+    "localhost,127.0.0.1",
 )
 
 render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "").strip()
@@ -48,13 +48,17 @@ if render_hostname and render_hostname not in ALLOWED_HOSTS:
 CSRF_TRUSTED_ORIGINS = [
     "https://easyschedule-0j0e.onrender.com",
     "https://*.onrender.com",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
 
-CSRF_COOKIE_DOMAIN = ".onrender.com"
-SESSION_COOKIE_DOMAIN = ".onrender.com"
+IS_RENDER = os.environ.get("RENDER", "").lower() == "true"
 
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
+SESSION_COOKIE_DOMAIN = ".onrender.com" if IS_RENDER else None
+
+CSRF_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
+SESSION_COOKIE_SAMESITE = "None" if IS_RENDER else "Lax"
 
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
@@ -189,7 +193,7 @@ STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', 'pk_not_configured')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', 'sk_not_configured')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', 'whsec_not_configured')
 STRIPE_API_VERSION = '2026-03-25.dahlia'
-STRIPE_DOMAIN_URL = os.getenv('STRIPE_DOMAIN_URL', 'https://easyschedule-0j0e.onrender.com')
+STRIPE_DOMAIN_URL = os.getenv('STRIPE_DOMAIN_URL', 'http://localhost:8000')
 STRIPE_DEFAULT_CURRENCY = os.getenv('STRIPE_DEFAULT_CURRENCY', 'brl')
 
 

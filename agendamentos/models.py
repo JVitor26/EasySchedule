@@ -51,7 +51,7 @@ class Agendamento(models.Model):
     profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE)
     data = models.DateField()
     hora = models.TimeField()
-    observacoes = models.TextField(blank=True, null=True)
+    observacoes = models.TextField(blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pendente")
     forma_pagamento = models.CharField(
         max_length=20,
@@ -176,7 +176,7 @@ class PlanoMensal(models.Model):
     mes_referencia = models.DateField()
     dia_semana = models.PositiveSmallIntegerField(choices=WEEKDAY_CHOICES)
     hora = models.TimeField()
-    observacoes = models.TextField(blank=True, null=True)
+    observacoes = models.TextField(blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pendente")
     pagamento_status = models.CharField(
         max_length=20,

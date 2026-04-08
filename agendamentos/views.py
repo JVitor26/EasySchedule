@@ -64,7 +64,7 @@ def agendamentos_form(request, pk=None):
                 Pagamento.sync_for_agendamento(agendamento)
                 return redirect('agendamentos_list')
             except ValidationError as e:
-                form.add_error(None, e.message)
+                form.add_error(None, str(e))
     else:
         form = AgendamentoForm(instance=agendamento, empresa=empresa)
 
@@ -264,6 +264,10 @@ def mover_agendamento(request, pk):
 
     try:
         payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'erro', 'mensagem': 'JSON inválido.'}, status=400)
+
+    try:
         data_evento = payload.get('data')
 
         if not data_evento:
