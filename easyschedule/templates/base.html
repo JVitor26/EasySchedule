@@ -163,6 +163,7 @@
             <a class="app-mobile-link {% if '/dashboard/' in request.path %}is-active{% endif %}" href="{% url 'dashboard_home' %}">Agenda</a>
             {% if not usuario_e_profissional %}
                 <a class="app-mobile-link {% if '/agendamentos/' in request.path and '/agendamentos/planos/' not in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">{{ business_profile.appointment_term_plural|default:"Agenda" }}</a>
+                <a class="app-mobile-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">{{ business_profile.service_term_plural|default:"Servicos" }}</a>
                 <a class="app-mobile-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
                 <a class="app-mobile-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
                 <a class="app-mobile-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
