@@ -11,8 +11,14 @@ class ProdutoForm(forms.ModelForm):
         self.fields["nome"].widget.attrs["placeholder"] = "Ex.: Oleo para barba premium"
         self.fields["categoria"].label = "Categoria"
         self.fields["categoria"].widget.attrs["placeholder"] = "Ex.: Finalizacao, cuidados, acessorios"
-        self.fields["preco"].label = "Preco"
+        self.fields["preco"].label = "Preço de exibição"
         self.fields["preco"].widget.attrs["placeholder"] = "0,00"
+        self.fields["valor_compra"].label = "Valor de compra (aquisição)"
+        self.fields["valor_compra"].widget.attrs["placeholder"] = "0,00"
+        self.fields["custo"].label = "Custo (operacional)"
+        self.fields["custo"].widget.attrs["placeholder"] = "0,00"
+        self.fields["valor_venda"].label = "Valor de venda ao cliente"
+        self.fields["valor_venda"].widget.attrs["placeholder"] = "0,00"
         self.fields["estoque"].label = "Quantidade em estoque"
         self.fields["estoque"].widget.attrs["placeholder"] = "0"
         self.fields["descricao"].label = "Descricao"
@@ -30,6 +36,9 @@ class ProdutoForm(forms.ModelForm):
             "nome",
             "categoria",
             "preco",
+            "valor_compra",
+            "custo",
+            "valor_venda",
             "estoque",
             "descricao",
             "especificacoes",
@@ -55,29 +64,21 @@ class VendaForm(forms.ModelForm):
 
         self.fields["produto"].label = "Produto"
         self.fields["produto"].empty_label = "Selecione o produto"
-        self.fields["cliente"].label = "Cliente cadastrado (opcional)"
-        self.fields["cliente"].empty_label = "Nenhum — informar nome abaixo"
+        self.fields["cliente"].label = "Cliente"
+        self.fields["cliente"].empty_label = "Cliente não cadastrado"
         self.fields["cliente_nome_avulso"].label = "Nome do cliente (se não cadastrado)"
         self.fields["cliente_nome_avulso"].widget.attrs["placeholder"] = "Ex.: João Silva"
-        self.fields["quantidade"].label = "Quantidade"
-        self.fields["custo"].label = "Custo de aquisição (R$)"
-        self.fields["custo"].widget.attrs["placeholder"] = "0,00"
-        self.fields["valor_mercado"].label = "Valor de mercado (R$)"
-        self.fields["valor_mercado"].widget.attrs["placeholder"] = "0,00"
-        self.fields["valor_final"].label = "Valor final cobrado (R$)"
-        self.fields["valor_final"].widget.attrs["placeholder"] = "0,00"
-        self.fields["metodo_pagamento"].label = "Forma de pagamento"
+        self.fields["valor_venda"].label = "Valor de venda (R$)"
+        self.fields["valor_venda"].widget.attrs["placeholder"] = "0,00"
         self.fields["data_venda"].label = "Data da venda"
-        self.fields["data_recebimento"].label = "Data de recebimento (deixe vazio se ainda não recebeu)"
+        self.fields["data_pagamento"].label = "Data do pagamento (vazio = ainda não pago)"
         self.fields["observacoes"].label = "Observações"
-        self.fields["observacoes"].widget.attrs["placeholder"] = "Anotações internas sobre esta venda."
+        self.fields["observacoes"].widget.attrs["placeholder"] = "Anotações internas."
 
     def clean(self):
         cleaned_data = super().clean()
-        cliente = cleaned_data.get("cliente")
-        nome_avulso = (cleaned_data.get("cliente_nome_avulso") or "").strip()
-        if not cliente and not nome_avulso:
-            self.add_error("cliente_nome_avulso", "Informe o cliente ou preencha o nome abaixo.")
+        if not cleaned_data.get("cliente") and not (cleaned_data.get("cliente_nome_avulso") or "").strip():
+            self.add_error("cliente_nome_avulso", "Selecione um cliente ou informe o nome.")
         return cleaned_data
 
     class Meta:
@@ -86,18 +87,14 @@ class VendaForm(forms.ModelForm):
             "produto",
             "cliente",
             "cliente_nome_avulso",
-            "quantidade",
-            "custo",
-            "valor_mercado",
-            "valor_final",
-            "metodo_pagamento",
+            "valor_venda",
             "data_venda",
-            "data_recebimento",
+            "data_pagamento",
             "observacoes",
         ]
         widgets = {
             "data_venda": forms.DateInput(attrs={"type": "date"}),
-            "data_recebimento": forms.DateInput(attrs={"type": "date"}),
+            "data_pagamento": forms.DateInput(attrs={"type": "date"}),
             "observacoes": forms.Textarea(attrs={"rows": 3}),
         }
 

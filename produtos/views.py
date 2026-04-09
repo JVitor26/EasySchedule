@@ -117,20 +117,14 @@ def vendas_list(request):
         vendas = vendas.filter(data_venda__lte=data_fim)
 
     # Totais
-    totais = vendas.aggregate(
-        total_receita=Sum("valor_final"),
-        total_custo=Sum("custo"),
-    )
+    totais = vendas.aggregate(total_receita=Sum("valor_venda"))
     total_receita = float(totais["total_receita"] or 0)
-    total_custo = float(totais["total_custo"] or 0)
 
     return render(request, "produtos/vendas_list.html", {
         "vendas": vendas,
         "data_inicio": data_inicio or "",
         "data_fim": data_fim or "",
         "total_receita": total_receita,
-        "total_custo": total_custo,
-        "total_lucro": total_receita - total_custo,
     })
 
 

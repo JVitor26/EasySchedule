@@ -10,8 +10,7 @@
       <p class="page-eyebrow">Financeiro</p>
       <h1 class="page-title">Vendas de Produtos</h1>
       <p class="page-subtitle">
-        Registre e acompanhe todas as vendas avulsas de produtos, com custo, valor de mercado e valor final.
-        Visível apenas para o proprietário.
+        Registre as vendas realizadas pelo seu estabelecimento. Visível apenas para o proprietário.
       </p>
     </div>
     <div class="page-actions">
@@ -38,24 +37,14 @@
     </form>
   </section>
 
-  <!-- Totais -->
+  <!-- Total -->
   <section class="stats-row">
     <div class="stat-card">
-      <span class="stat-label">Receita total</span>
+      <span class="stat-label">Total em vendas</span>
       <span class="stat-value">R$ {{ total_receita|floatformat:2 }}</span>
     </div>
     <div class="stat-card">
-      <span class="stat-label">Custo total</span>
-      <span class="stat-value">R$ {{ total_custo|floatformat:2 }}</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Lucro</span>
-      <span class="stat-value {% if total_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
-        R$ {{ total_lucro|floatformat:2 }}
-      </span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Qtd de vendas</span>
+      <span class="stat-label">Quantidade de vendas</span>
       <span class="stat-value">{{ vendas|length }}</span>
     </div>
   </section>
@@ -71,14 +60,9 @@
           <tr>
             <th>Produto</th>
             <th>Cliente</th>
-            <th>Qtd</th>
-            <th>Custo unit.</th>
-            <th>Vlr mercado</th>
-            <th>Vlr final</th>
-            <th>Lucro</th>
-            <th>Pagamento</th>
-            <th>Data venda</th>
-            <th>Data recebimento</th>
+            <th>Valor de venda</th>
+            <th>Data da venda</th>
+            <th>Data do pagamento</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -87,27 +71,14 @@
           <tr>
             <td><span class="table-mobile-label">Produto</span>{{ venda.produto.nome }}</td>
             <td><span class="table-mobile-label">Cliente</span>{{ venda.nome_cliente }}</td>
-            <td><span class="table-mobile-label">Qtd</span>{{ venda.quantidade }}</td>
-            <td><span class="table-mobile-label">Custo</span>R$ {{ venda.custo|floatformat:2 }}</td>
-            <td><span class="table-mobile-label">Vlr mercado</span>R$ {{ venda.valor_mercado|floatformat:2 }}</td>
-            <td><span class="table-mobile-label">Vlr final</span>R$ {{ venda.valor_final|floatformat:2 }}</td>
+            <td><span class="table-mobile-label">Valor de venda</span>R$ {{ venda.valor_venda|floatformat:2 }}</td>
+            <td><span class="table-mobile-label">Data da venda</span>{{ venda.data_venda|date:"d/m/Y" }}</td>
             <td>
-              <span class="table-mobile-label">Lucro</span>
-              <span class="{% if venda.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
-                R$ {{ venda.lucro|floatformat:2 }}
-              </span>
-            </td>
-            <td>
-              <span class="table-mobile-label">Pagamento</span>
-              {{ venda.get_metodo_pagamento_display|default:"—" }}
-            </td>
-            <td><span class="table-mobile-label">Data venda</span>{{ venda.data_venda|date:"d/m/Y" }}</td>
-            <td>
-              <span class="table-mobile-label">Recebimento</span>
-              {% if venda.data_recebimento %}
-                {{ venda.data_recebimento|date:"d/m/Y" }}
+              <span class="table-mobile-label">Data do pagamento</span>
+              {% if venda.data_pagamento %}
+                {{ venda.data_pagamento|date:"d/m/Y" }}
               {% else %}
-                <span class="badge-soft">Pendente</span>
+                <span class="badge-soft">Não recebido</span>
               {% endif %}
             </td>
             <td>
@@ -120,7 +91,7 @@
           </tr>
           {% empty %}
           <tr class="empty-row">
-            <td colspan="11" class="table-empty-cell">Nenhuma venda registrada no período.</td>
+            <td colspan="6" class="table-empty-cell">Nenhuma venda registrada no período.</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -9,7 +9,7 @@
     <div class="page-copy">
       <p class="page-eyebrow">Vendas</p>
       <h1 class="page-title">{{ page_title }}</h1>
-      <p class="page-subtitle">Registre os dados completos da venda: custo, valor de mercado, valor cobrado e datas.</p>
+      <p class="page-subtitle">Registre os dados da venda: produto, cliente, valor e datas.</p>
     </div>
   </header>
 
@@ -28,57 +28,33 @@
           {{ form.produto.errors }}
         </div>
         <div class="form-group">
-          <label>{{ form.quantidade.label }}</label>
-          {{ form.quantidade }}
-          {{ form.quantidade.errors }}
-        </div>
-        <div class="form-group">
           <label>{{ form.cliente.label }}</label>
           {{ form.cliente }}
           {{ form.cliente.errors }}
         </div>
-        <div class="form-group">
+        <div class="form-group full">
           <label>{{ form.cliente_nome_avulso.label }}</label>
           {{ form.cliente_nome_avulso }}
           {{ form.cliente_nome_avulso.errors }}
         </div>
       </div>
 
-      <div class="form-section-title">Valores</div>
+      <div class="form-section-title">Valor e datas</div>
       <div class="form-grid">
         <div class="form-group">
-          <label>{{ form.custo.label }}</label>
-          {{ form.custo }}
-          {{ form.custo.errors }}
+          <label>{{ form.valor_venda.label }}</label>
+          {{ form.valor_venda }}
+          {{ form.valor_venda.errors }}
         </div>
-        <div class="form-group">
-          <label>{{ form.valor_mercado.label }}</label>
-          {{ form.valor_mercado }}
-          {{ form.valor_mercado.errors }}
-        </div>
-        <div class="form-group">
-          <label>{{ form.valor_final.label }}</label>
-          {{ form.valor_final }}
-          {{ form.valor_final.errors }}
-        </div>
-        <div class="form-group">
-          <label>{{ form.metodo_pagamento.label }}</label>
-          {{ form.metodo_pagamento }}
-          {{ form.metodo_pagamento.errors }}
-        </div>
-      </div>
-
-      <div class="form-section-title">Datas</div>
-      <div class="form-grid">
         <div class="form-group">
           <label>{{ form.data_venda.label }}</label>
           {{ form.data_venda }}
           {{ form.data_venda.errors }}
         </div>
         <div class="form-group">
-          <label>{{ form.data_recebimento.label }}</label>
-          {{ form.data_recebimento }}
-          {{ form.data_recebimento.errors }}
+          <label>{{ form.data_pagamento.label }}</label>
+          {{ form.data_pagamento }}
+          {{ form.data_pagamento.errors }}
         </div>
         <div class="form-group full">
           <label>{{ form.observacoes.label }}</label>
@@ -95,3 +71,4 @@
   </div>
 </div>
 {% endblock %}
+
