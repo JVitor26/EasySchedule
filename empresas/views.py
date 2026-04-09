@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from django.db import transaction
@@ -46,8 +47,9 @@ def cadastro_empresa(request):
                     limite_profissionais=form.cleaned_data['limite_profissionais'],
                 )
 
-            messages.success(request, 'Cadastro realizado com sucesso! Faça login para continuar.')
-            return redirect('login')
+            messages.success(request, 'Cadastro realizado com sucesso! Bem-vindo ao EasySchedule.')
+            login(request, user)
+            return redirect('dashboard_home')
     else:
         form = CadastroEmpresaForm()
 
