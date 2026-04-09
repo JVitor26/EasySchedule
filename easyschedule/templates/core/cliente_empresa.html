@@ -44,12 +44,10 @@
       </p>
       {% if success_payment %}
       <div class="client-success-actions">
-        <a class="btn-success" href="{% url 'cliente_pagamento' success_payment.referencia_publica %}">Pagar agora pelo aplicativo</a>
         <span class="payment-inline-note">Valor pendente: R$ {{ success_payment.valor|floatformat:2 }}</span>
       </div>
       {% elif success_plan %}
       <div class="client-success-actions">
-        <a class="btn-success" href="{% url 'cliente_plano_pagamento' success_plan.referencia_publica %}">Pagar pacote pelo aplicativo</a>
         <span class="payment-inline-note">Valor do mes: R$ {{ success_plan.valor_mensal|floatformat:2 }}</span>
       </div>
       {% endif %}
@@ -106,8 +104,8 @@
           <h2>Produtos da empresa</h2>
           <p>Confira alguns itens disponiveis para venda pela empresa no mesmo portal.</p>
         </div>
-        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-          🏪 Ir para loja completa
+        <a href="{% url 'cliente_home' %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+          Ver outras empresas
         </a>
       </div>
 
@@ -155,8 +153,8 @@
           <strong>Total de produtos:</strong> R$ <span id="carrinho-total">0.00</span>
         </p>
         <div style="margin-top: 1rem;">
-          <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block;">
-            Adicionar mais produtos
+          <a href="{% url 'cliente_empresa' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block;">
+            Atualizar produtos
           </a>
           <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.5rem 1rem; background: #ef4444;">
             Limpar carrinho
@@ -165,7 +163,7 @@
       </div>
 
       <p id="carrinho-vazio" style="color: var(--text-2); text-align: center; padding: 1rem;">
-        Nenhum produto no carrinho. <a href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: underline;">Ir para loja</a>
+        Nenhum produto no carrinho. <a href="{% url 'cliente_empresa' empresa.id %}" style="text-decoration: underline;">Ver produtos</a>
       </p>
     </section>
 
@@ -676,4 +674,3 @@ carregarMeusAgendamentos().catch((error) => setTrackFeedback(error.message, 'is-
 {% endif %}
 </script>
 {% endblock %}
-
