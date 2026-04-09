@@ -12,6 +12,7 @@
   data-events-url="{% url 'agendamentos_api' %}"
   data-move-url-template="{% url 'agendamentos_move' 999999 %}"
   data-edit-url-template="{% url 'agendamentos_edit' 999999 %}"
+  data-status-url-template="{% url 'agendamentos_status' 999999 %}"
 >
   <div class="agenda-shell">
     <header class="agenda-hero">
@@ -235,6 +236,9 @@
 
     <div class="agenda-modal-actions">
       <a class="btn-success" id="modalEditarLink" href="{% url 'agendamentos_list' %}">Editar agendamento</a>
+      <button type="button" class="btn-primary agenda-status-btn" data-status="confirmado" style="display:none">✓ Confirmar</button>
+      <button type="button" class="btn-primary agenda-status-btn" data-status="finalizado" style="display:none">✔ Finalizar</button>
+      <button type="button" class="btn-danger agenda-status-btn" data-status="cancelado" style="display:none">✕ Cancelar</button>
       <button type="button" class="btn-secondary" id="modalFecharAcao">Fechar</button>
     </div>
   </div>

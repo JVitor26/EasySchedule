@@ -11,5 +11,6 @@ urlpatterns = [
     path('<int:pk>/editar/', views.agendamentos_form, name='agendamentos_edit'),
     path('<int:pk>/deletar/', views.agendamentos_delete, name='agendamentos_delete'),
     path('<int:pk>/mover/', views.mover_agendamento, name='agendamentos_move'),
+    path('<int:pk>/status/', views.atualizar_status_agendamento, name='agendamentos_status'),
     path('api/', views.agendamentos_api, name='agendamentos_api'),
 ]

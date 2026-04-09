@@ -18,6 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const eventsUrl = agendaPage.dataset.eventsUrl;
     const moveUrlTemplate = agendaPage.dataset.moveUrlTemplate;
     const editUrlTemplate = agendaPage.dataset.editUrlTemplate;
+    const statusUrlTemplate = agendaPage.dataset.statusUrlTemplate;
+
+    const STATUS_TRANSITIONS = {
+        pendente: ["confirmado", "cancelado"],
+        confirmado: ["finalizado", "cancelado"],
+        finalizado: [],
+        cancelado: [],
+    };
 
     const elements = {
         filtroProfissional: document.getElementById("agendaFiltroProfissional"),
@@ -127,6 +135,12 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.modalTelefone.textContent = props.telefone || "-";
         elements.modalObservacoes.textContent = props.observacoes || "Sem observacoes informadas.";
         elements.modalEditarLink.href = replaceTemplateId(editUrlTemplate, event.id);
+
+        const allowed = STATUS_TRANSITIONS[props.status] || [];
+        document.querySelectorAll(".agenda-status-btn").forEach((btn) => {
+            btn.style.display = allowed.includes(btn.dataset.status) ? "" : "none";
+            btn.dataset.eventId = event.id;
+        });
     }
 
     function openModal(event) {
@@ -259,6 +273,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     [elements.fecharModal, elements.modalFecharAcao].forEach((button) => {
         button.addEventListener("click", closeModal);
+    });
+
+    document.querySelectorAll(".agenda-status-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+            const eventId = btn.dataset.eventId;
+            const novoStatus = btn.dataset.status;
+            if (!eventId || !novoStatus) return;
+
+            setFeedback("Atualizando status...", "is-loading");
+
+            try {
+                const response = await fetch(replaceTemplateId(statusUrlTemplate, eventId), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie("csrftoken"),
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: JSON.stringify({ status: novoStatus }),
+                });
+
+                const payload = await response.json();
+                if (!response.ok || payload.status !== "ok") {
+                    throw new Error(payload.mensagem || "Erro ao atualizar status.");
+                }
+
+                setFeedback(`Status atualizado para "${payload.novo_status_label}".`, "is-success");
+                closeModal();
+                calendar.refetchEvents();
+            } catch (error) {
+                setFeedback(error.message, "is-error");
+            }
+        });
     });
 
     elements.modal.addEventListener("click", (event) => {

@@ -12,6 +12,7 @@ import json
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
 from empresas.permissions import is_profissional_user
+from core.notifications import notify_booking_created
 
 
 @login_required
@@ -58,10 +59,16 @@ def agendamentos_form(request, pk=None):
         form = AgendamentoForm(request.POST, instance=agendamento, empresa=empresa)
         if form.is_valid():
             try:
+                is_new = agendamento is None
                 agendamento = form.save(commit=False)
                 agendamento.empresa = empresa
                 agendamento.save()
                 Pagamento.sync_for_agendamento(agendamento)
+                if is_new:
+                    try:
+                        notify_booking_created(agendamento)
+                    except Exception:
+                        pass
                 return redirect('agendamentos_list')
             except ValidationError as e:
                 form.add_error(None, str(e))
@@ -220,7 +227,7 @@ def agendamentos_api(request):
 
     for ag in queryset:
         inicio = datetime.combine(ag.data, ag.hora)
-        termino = inicio + timedelta(minutes=ag.servico.tempo or 0)
+        termino = inicio + timedelta(minutes=ag.servico.tempo or 30)
         eventos.append({
             'id': ag.id,
             'title': f'{ag.cliente.nome} - {ag.servico.nome}',
@@ -294,3 +301,49 @@ def mover_agendamento(request, pk):
         return JsonResponse({'status': 'erro', 'mensagem': str(exc)}, status=400)
 
     return JsonResponse({'status': 'ok'})
+
+
+VALID_STATUS_TRANSITIONS = {
+    'pendente': ['confirmado', 'cancelado'],
+    'confirmado': ['finalizado', 'cancelado'],
+    'finalizado': [],
+    'cancelado': [],
+}
+
+
+@login_required
+def atualizar_status_agendamento(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'erro', 'mensagem': 'Método não permitido.'}, status=405)
+
+    empresa = get_active_empresa(request)
+    if not empresa:
+        return JsonResponse({'status': 'erro', 'mensagem': 'Empresa não selecionada.'}, status=400)
+
+    agendamento = get_object_or_404(Agendamento, pk=pk, empresa=empresa)
+
+    if is_profissional_user(request.user) and agendamento.profissional_id != request.user.profissional_profile.id:
+        return JsonResponse({'status': 'erro', 'mensagem': 'Sem permissão.'}, status=403)
+
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'erro', 'mensagem': 'JSON inválido.'}, status=400)
+
+    novo_status = payload.get('status', '').strip()
+    allowed = VALID_STATUS_TRANSITIONS.get(agendamento.status, [])
+
+    if novo_status not in allowed:
+        return JsonResponse({
+            'status': 'erro',
+            'mensagem': f'Transição inválida de "{agendamento.status}" para "{novo_status}".',
+        }, status=400)
+
+    agendamento.status = novo_status
+    agendamento.save(update_fields=['status'])
+
+    return JsonResponse({
+        'status': 'ok',
+        'novo_status': novo_status,
+        'novo_status_label': agendamento.get_status_display(),
+    })
