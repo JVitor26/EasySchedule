@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
-from .models import Agendamento, Pagamento, PlanoMensal
+from .models import Agendamento, PlanoMensal
 from .forms import AgendamentoForm, PlanoMensalForm
 from datetime import datetime, timedelta
 import json
@@ -26,7 +26,6 @@ def agendamentos_list(request):
         'cliente',
         'servico',
         'profissional',
-        'pagamento',
         'plano',
     )
     if is_profissional_user(request.user):
@@ -63,7 +62,6 @@ def agendamentos_form(request, pk=None):
                 agendamento = form.save(commit=False)
                 agendamento.empresa = empresa
                 agendamento.save()
-                Pagamento.sync_for_agendamento(agendamento)
                 if is_new:
                     try:
                         notify_booking_created(agendamento)

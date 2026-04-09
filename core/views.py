@@ -7,7 +7,6 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.db.models import Count
 from django.utils import timezone
 import json
 import re
@@ -15,7 +14,7 @@ from datetime import timedelta
 import secrets
 
 from agendamentos.availability import list_available_slots
-from agendamentos.models import Pagamento, PlanoMensal, AgendamentoProduto, Agendamento
+from agendamentos.models import PlanoMensal, Agendamento
 from agendamentos.plans import list_monthly_available_slots
 from empresas.business_profiles import get_business_profile
 from empresas.models import Empresa
@@ -33,7 +32,6 @@ from .forms import (
     PasswordRecoveryConfirmForm,
     PasswordRecoveryRequestForm,
     PublicBookingForm,
-    PublicCheckoutForm,
 )
 
 
@@ -91,19 +89,6 @@ def _enforce_company_portal_access(request, empresa):
         return JsonResponse({"detail": "Acesso negado para portal de outra empresa."}, status=403)
 
     return None
-
-
-def _cart_session_key(empresa_id):
-    return f"carrinho_empresa_{empresa_id}"
-
-
-def _get_company_cart(request, empresa_id):
-    key = _cart_session_key(empresa_id)
-    carrinho = request.session.get(key)
-    if not isinstance(carrinho, dict):
-        carrinho = {}
-        request.session[key] = carrinho
-    return carrinho, key
 
 
 def _portal_session_key(empresa_id):
@@ -266,9 +251,7 @@ def empresa_detail(request, empresa_id):
             else:
                 success_booking = result["agendamento"]
                 success_client = result["cliente"]
-                success_payment = result["pagamento"]
                 success_plan = result["plano"]
-                request.session.pop(_cart_session_key(empresa.id), None)
                 request.session.modified = True
                 form = PublicBookingForm(empresa=empresa, initial={
                     "nome": success_client.nome,
@@ -280,12 +263,11 @@ def empresa_detail(request, empresa_id):
     else:
         form = PublicBookingForm(empresa=empresa)
 
-    # Produtos mais vendidos (top 3)
+    # Produtos em destaque (top 3)
     top_produtos = (
         Produto.objects
         .filter(empresa=empresa, ativo=True, destaque_publico=True)
-        .annotate(vendas=Count('agendamentos'))
-        .order_by('-vendas', 'nome')
+        .order_by('nome')
         [:3]
     )
 
@@ -299,83 +281,9 @@ def empresa_detail(request, empresa_id):
         "profissionais": Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome"),
         "success_booking": success_booking,
         "success_client": success_client,
-        "success_payment": success_payment,
         "success_plan": success_plan,
     }
     return render(request, "core/cliente_empresa.html", context)
-
-
-def _is_checkout_paid(cobranca):
-    if hasattr(cobranca, "pagamento_status"):
-        return cobranca.pagamento_status == "pago"
-    return cobranca.status == "pago"
-
-
-def _render_checkout(request, cobranca, *, checkout_kind, agendamento=None, plano=None):
-    payment_success = False
-
-    if request.method == "POST" and not _is_checkout_paid(cobranca):
-        form = PublicCheckoutForm(request.POST, cobranca=cobranca)
-        if form.is_valid():
-            form.save()
-            payment_success = True
-            messages.success(request, "Pagamento registrado com sucesso.")
-            form = PublicCheckoutForm(cobranca=cobranca)
-    else:
-        form = PublicCheckoutForm(cobranca=cobranca)
-        payment_success = _is_checkout_paid(cobranca)
-
-    return render(request, "core/cliente_pagamento.html", {
-        "empresa": cobranca.empresa,
-        "checkout": cobranca,
-        "checkout_kind": checkout_kind,
-        "checkout_total": getattr(cobranca, "valor_mensal", None) or getattr(cobranca, "valor", None),
-        "agendamento": agendamento,
-        "plano": plano,
-        "cliente": cobranca.cliente,
-        "form": form,
-        "payment_success": payment_success,
-    })
-
-
-def payment_detail(request, token):
-    pagamento = get_object_or_404(
-        Pagamento.objects.select_related(
-            "empresa",
-            "agendamento",
-            "cliente",
-            "agendamento__servico",
-            "agendamento__profissional",
-        ),
-        referencia_publica=token,
-    )
-
-    return _render_checkout(
-        request,
-        pagamento,
-        checkout_kind="avulso",
-        agendamento=pagamento.agendamento,
-    )
-
-
-def plan_payment_detail(request, token):
-    plano = get_object_or_404(
-        PlanoMensal.objects.select_related(
-            "empresa",
-            "cliente",
-            "servico",
-            "profissional",
-        ),
-        referencia_publica=token,
-    )
-
-    return _render_checkout(
-        request,
-        plano,
-        checkout_kind="plano",
-        agendamento=plano.first_occurrence,
-        plano=plano,
-    )
 
 
 def password_recovery_request(request):
@@ -579,228 +487,6 @@ def available_slots_api(request, empresa_id):
     return JsonResponse(payload)
 
 
-# ============ VIEWS DE PRODUTOS E CARRINHO ============
-
-def loja_produtos(request, empresa_id):
-    """Página de loja de produtos para o cliente"""
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    access_denied = _enforce_company_portal_access(request, empresa)
-    if access_denied:
-        return access_denied
-
-    profile = get_business_profile(empresa.tipo)
-    categoria = request.GET.get("categoria", "")
-    busca = request.GET.get("busca", "")
-    
-    produtos = Produto.objects.filter(
-        empresa=empresa,
-        ativo=True,
-        destaque_publico=True,
-    )
-    
-    if categoria:
-        produtos = produtos.filter(categoria=categoria)
-    if busca:
-        produtos = produtos.filter(nome__icontains=busca) | produtos.filter(descricao__icontains=busca)
-    
-    categorias = Produto.objects.filter(
-        empresa=empresa,
-        ativo=True,
-        destaque_publico=True,
-    ).values_list("categoria", flat=True).distinct().filter(categoria__gt="")
-    
-    context = {
-        "empresa": empresa,
-        "profile": profile,
-        "produtos": produtos.order_by("nome"),
-        "categorias": sorted(set(categorias)),
-        "categoria_selecionada": categoria,
-        "busca": busca,
-    }
-    return render(request, "core/loja_produtos.html", context)
-
-
-@require_http_methods(["POST"])
-def api_carrinho_adicionar(request, empresa_id):
-    """API para adicionar produto ao carrinho (sessão ou temporário)"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"status": "erro", "message": "JSON inválido"}, status=400)
-    
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    access_denied = _enforce_company_portal_access(request, empresa)
-    if access_denied:
-        return access_denied
-
-    produto_id = data.get("produto_id")
-    quantidade = int(data.get("quantidade", 1))
-    
-    if quantidade <= 0:
-        return JsonResponse({"status": "erro", "message": "Quantidade deve ser maior que 0"}, status=400)
-    
-    produto = get_object_or_404(Produto, pk=produto_id, empresa=empresa, ativo=True)
-    
-    # Verificar estoque disponível
-    if produto.estoque_disponivel < quantidade:
-        return JsonResponse({
-            "status": "erro",
-            "message": f"Estoque insuficiente. Disponível: {produto.estoque_disponivel}"
-        }, status=400)
-    
-    # Gerenciar carrinho na sessão
-    carrinho, carrinho_key = _get_company_cart(request, empresa.id)
-    produto_id_str = str(produto_id)
-    
-    if produto_id_str in carrinho:
-        total = carrinho[produto_id_str]["quantidade"] + quantidade
-        if total > produto.estoque_disponivel:
-            return JsonResponse({
-                "status": "erro",
-                "message": f"Estoque insuficiente para essa quantidade. Disponível: {produto.estoque_disponivel}"
-            }, status=400)
-        carrinho[produto_id_str]["quantidade"] = total
-    else:
-        carrinho[produto_id_str] = {
-            "quantidade": quantidade,
-            "preco": str(produto.preco),
-            "nome": produto.nome,
-        }
-    
-    request.session[carrinho_key] = carrinho
-    request.session.modified = True
-    
-    total_itens = sum(item["quantidade"] for item in carrinho.values())
-    
-    return JsonResponse({
-        "status": "sucesso",
-        "message": f"{produto.nome} adicionado ao carrinho",
-        "total_itens": total_itens,
-        "carrinho": carrinho,
-    })
-
-
-@require_http_methods(["POST"])
-def api_carrinho_remover(request, empresa_id):
-    """API para remover produto do carrinho"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"status": "erro", "message": "JSON inválido"}, status=400)
-    
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    access_denied = _enforce_company_portal_access(request, empresa)
-    if access_denied:
-        return access_denied
-
-    produto_id = str(data.get("produto_id"))
-    carrinho, carrinho_key = _get_company_cart(request, empresa.id)
-    
-    if produto_id in carrinho:
-        nome_produto = carrinho[produto_id]["nome"]
-        del carrinho[produto_id]
-        request.session[carrinho_key] = carrinho
-        request.session.modified = True
-        total_itens = sum(item["quantidade"] for item in carrinho.values())
-        
-        return JsonResponse({
-            "status": "sucesso",
-            "message": f"{nome_produto} removido do carrinho",
-            "total_itens": total_itens,
-            "carrinho": carrinho,
-        })
-    
-    return JsonResponse({"status": "erro", "message": "Produto não encontrado no carrinho"}, status=404)
-
-
-@require_http_methods(["POST"])
-def api_carrinho_atualizar(request, empresa_id):
-    """API para atualizar quantidade de produto no carrinho"""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"status": "erro", "message": "JSON inválido"}, status=400)
-    
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    access_denied = _enforce_company_portal_access(request, empresa)
-    if access_denied:
-        return access_denied
-
-    produto_id = str(data.get("produto_id"))
-    quantidade = int(data.get("quantidade", 0))
-    
-    if quantidade <= 0:
-        return JsonResponse({"status": "erro", "message": "Quantidade deve ser maior que 0"}, status=400)
-    
-    produto = get_object_or_404(Produto, pk=int(produto_id), empresa=empresa, ativo=True)
-    
-    if produto.estoque_disponivel < quantidade:
-        return JsonResponse({
-            "status": "erro",
-            "message": f"Estoque insuficiente. Disponível: {produto.estoque_disponivel}"
-        }, status=400)
-    
-    carrinho, carrinho_key = _get_company_cart(request, empresa.id)
-    
-    if produto_id in carrinho:
-        carrinho[produto_id]["quantidade"] = quantidade
-        request.session[carrinho_key] = carrinho
-        request.session.modified = True
-        total_itens = sum(item["quantidade"] for item in carrinho.values())
-        
-        return JsonResponse({
-            "status": "sucesso",
-            "message": "Quantidade atualizada",
-            "total_itens": total_itens,
-            "carrinho": carrinho,
-        })
-    
-    return JsonResponse({"status": "erro", "message": "Produto não encontrado no carrinho"}, status=404)
-
-
-def api_carrinho_listar(request, empresa_id):
-    """API para listar itens do carrinho"""
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    access_denied = _enforce_company_portal_access(request, empresa)
-    if access_denied:
-        return access_denied
-
-    carrinho, carrinho_key = _get_company_cart(request, empresa.id)
-    
-    # Enriquecer carrinho com dados do banco
-    itens = []
-    total_preco = 0
-    ids_invalidos = []
-    
-    for produto_id_str, item in carrinho.items():
-        try:
-            produto = Produto.objects.get(pk=int(produto_id_str), empresa=empresa)
-            preco_total = float(item["preco"]) * item["quantidade"]
-            itens.append({
-                "produto_id": int(produto_id_str),
-                "nome": produto.nome,
-                "preco": str(produto.preco),
-                "quantidade": item["quantidade"],
-                "preco_total": str(preco_total),
-                "estoque_disponivel": produto.estoque_disponivel,
-            })
-            total_preco += preco_total
-        except Produto.DoesNotExist:
-            ids_invalidos.append(produto_id_str)
-    for pid in ids_invalidos:
-        del carrinho[pid]
-    
-    request.session[carrinho_key] = carrinho
-    request.session.modified = True
-    
-    return JsonResponse({
-        "status": "sucesso",
-        "itens": itens,
-        "total_itens": sum(item["quantidade"] for item in itens),
-        "total_preco": str(total_preco),
-    })
-
-
 @require_http_methods(["POST"])
 def portal_enviar_otp_api(request, empresa_id):
     empresa = get_object_or_404(Empresa, pk=empresa_id)
@@ -986,11 +672,6 @@ def cliente_agendamentos_api(request, empresa_id):
 
     payload = []
     for ag in agendamentos:
-        pagamento = ag.payment_record
-        payment_url = ""
-        if pagamento and pagamento.status != "pago":
-            payment_url = f"/cliente/pagamento/{pagamento.referencia_publica}/"
-
         payload.append({
             "id": ag.id,
             "servico": ag.servico.nome,
@@ -1001,8 +682,6 @@ def cliente_agendamentos_api(request, empresa_id):
             "status_raw": ag.status,
             "tipo": "Proximo" if ag.data >= hoje else "Historico",
             "valor": str(ag.servico.preco),
-            "pagamento_status": pagamento.get_status_display() if pagamento else "-",
-            "pagamento_url": payment_url,
             "can_change": _can_client_change_appointment(ag),
             "agendamento_iso_date": ag.data.isoformat(),
             "agendamento_hour": ag.hora.strftime("%H:%M"),
@@ -1034,14 +713,6 @@ def cliente_agendamento_cancelar_api(request, empresa_id, agendamento_id):
 
     agendamento.status = "cancelado"
     agendamento.save(update_fields=["status"])
-
-    pagamento = agendamento.payment_record
-    if pagamento and pagamento.status == "pendente":
-        pagamento.status = "cancelado"
-        pagamento.save(update_fields=["status", "atualizado_em"])
-
-    for item in agendamento.produtos.filter(pagamento_status="reservado"):
-        item.desfazer_reserva()
 
     return JsonResponse({"status": "sucesso", "message": "Agendamento cancelado com sucesso."})
 
@@ -1161,199 +832,14 @@ def cliente_minha_conta(request, empresa_id):
         "cliente_has_portal_password": cliente.has_portal_password,
     })
 
-
-# ============================================
-# 💳 STRIPE CHECKOUT & PAYMENT INTEGRATION
-# ============================================
-
-@require_http_methods(["GET", "POST"])
-def stripe_checkout_agendamento_api(request, pagamento_id):
-	"""
-	Create a Stripe Checkout Session for a single appointment payment.
-	GET: Returns checkout URL
-	"""
-	from .stripe_helpers import create_checkout_session, StripeCheckoutError
-	
-	pagamento = get_object_or_404(Pagamento, pk=pagamento_id)
-	
-	if request.method == "GET":
-		try:
-			result = create_checkout_session(
-				pagamento,
-				payment_type="agendamento",
-				request=request
-			)
-			
-			return JsonResponse({
-				"status": "sucesso",
-				"session_id": result["session_id"],
-				"checkout_url": result["checkout_url"],
-				"public_key": settings.STRIPE_PUBLIC_KEY,
-			})
-		except StripeCheckoutError as e:
-			return JsonResponse({"status": "erro", "message": str(e)}, status=400)
-		except Exception as e:
-			return JsonResponse({"status": "erro", "message": f"Erro ao criar checkout: {str(e)}"}, status=500)
-	
-	# POST: Update payment after checkout
-	if pagamento.status == "pago":
-		return JsonResponse({"status": "sucesso", "message": "Pagamento já foi processado"})
-	
-	return JsonResponse({"status": "info", "message": "Aguardando confirmação do Stripe"})
-
-
-@require_http_methods(["GET", "POST"])
-def stripe_checkout_plano_api(request, plano_id):
-	"""
-	Create a Stripe Checkout Session for a monthly subscription payment.
-	GET: Returns checkout URL  
-	"""
-	from .stripe_helpers import create_checkout_session, StripeCheckoutError
-	
-	plano = get_object_or_404(PlanoMensal, pk=plano_id)
-	
-	if request.method == "GET":
-		try:
-			result = create_checkout_session(
-				plano,
-				payment_type="plano",
-				request=request
-			)
-			
-			return JsonResponse({
-				"status": "sucesso",
-				"session_id": result["session_id"],
-				"checkout_url": result["checkout_url"],
-				"public_key": settings.STRIPE_PUBLIC_KEY,
-			})
-		except StripeCheckoutError as e:
-			return JsonResponse({"status": "erro", "message": str(e)}, status=400)
-		except Exception as e:
-			return JsonResponse({"status": "erro", "message": f"Erro ao criar checkout: {str(e)}"}, status=500)
-	
-	# POST: Update payment after checkout
-	if plano.pagamento_status == "pago":
-		return JsonResponse({"status": "sucesso", "message": "Pagamento já foi processado"})
-	
-	return JsonResponse({"status": "info", "message": "Aguardando confirmação do Stripe"})
-
-
-@require_http_methods(["POST"])
-def stripe_webhook(request):
-	"""
-	Handle Stripe webhook events.
-	Events:
-	- checkout.session.completed: Payment successful
-	- payment_intent.payment_failed: Payment failed
-	"""
-	import stripe
-	from .stripe_helpers import (
-		handle_checkout_session_completed,
-		handle_payment_intent_failed,
-	)
-	
-	payload = request.body
-	sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-	
-	try:
-		event = stripe.Webhook.construct_event(
-			payload,
-			sig_header,
-			settings.STRIPE_WEBHOOK_SECRET
-		)
-	except ValueError:
-		return HttpResponse(status=400)
-	except stripe.error.SignatureVerificationError:
-		return HttpResponse(status=400)
-	
-	# Handle events
-	if event['type'] == 'checkout.session.completed':
-		session_id = event['data']['object']['id']
-		result = handle_checkout_session_completed(session_id)
-		if not result.get('success'):
-			return JsonResponse(result, status=400)
-	
-	elif event['type'] == 'payment_intent.payment_failed':
-		payment_intent_id = event['data']['object']['id']
-		result = handle_payment_intent_failed(payment_intent_id)
-		if not result.get('success'):
-			return JsonResponse(result, status=400)
-	
-	return HttpResponse(status=200)
-
-
-@require_http_methods(["GET"])
-def stripe_checkout_success(request):
-	"""
-	Redirect page after successful Stripe checkout.
-	Syncs payment status with Stripe and confirms locally.
-	"""
-	from .stripe_helpers import retrieve_checkout_session, sync_payment_with_stripe
-	from core.models import StripeTransaction
-	
-	session_id = request.GET.get('session_id')
-	if not session_id:
-		messages.warning(request, "Sessão de checkout não encontrada.")
-		return redirect('home')
-	
-	# Retrieve session
-	session = retrieve_checkout_session(session_id)
-	if not session:
-		messages.error(request, "Sessão de checkout inválida.")
-		return redirect('home')
-	
-	# Find StripeTransaction
-	stripe_tx = StripeTransaction.objects.filter(stripe_session_id=session_id).first()
-	if not stripe_tx:
-		messages.error(request, "Transação não encontrada.")
-		return redirect('home')
-	
-	# Sync payment if successful
-	if session.payment_status == "paid":
-		if stripe_tx.object_type == "agendamento":
-			pagamento = Pagamento.objects.filter(agendamento_id=stripe_tx.object_id).first()
-			if pagamento:
-				sync_payment_with_stripe(pagamento, "agendamento")
-				messages.success(request, "Pagamento confirmado com sucesso!")
-				return redirect('payment_detail', token=pagamento.referencia_publica)
-		
-		elif stripe_tx.object_type == "plano":
-			plano = PlanoMensal.objects.filter(id=stripe_tx.object_id).first()
-			if plano:
-				sync_payment_with_stripe(plano, "plano")
-				messages.success(request, "Pagamento do plano confirmado!")
-				return redirect('plan_payment_detail', token=plano.referencia_publica)
-	
-	messages.info(request, "Continuando processamento do pagamento...")
-	return JsonResponse({"status": "processing", "session_id": session_id})
-
-
-@require_http_methods(["GET"])
-def stripe_checkout_cancel(request):
-	"""
-	Redirect page when customer cancels Stripe checkout.
-	"""
-	session_id = request.GET.get('session_id')
-	item_type = request.GET.get('type', 'agendamento')
-	
-	messages.warning(request, "Você cancelou o checkout. Seu pagamento foi preservado.")
-	
-	if item_type == "agendamento":
-		return redirect('home')
-	elif item_type == "plano":
-		return redirect('home')
-	
-	return redirect('home')
-
-
 def service_worker_js(_request):
         content = """
 const CACHE_NAME = 'easyschedule-pwa-v1';
-const URLS = ['/', '/cliente/', '/static/css/theme.css'];
+const STATIC_URLS = ['/static/css/theme.css'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(URLS)).then(() => self.skipWaiting())
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_URLS)).then(() => self.skipWaiting())
     );
 });
 
@@ -1366,15 +852,27 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
+
+    const url = new URL(event.request.url);
+
+    // Só faz cache de arquivos estáticos; tudo mais vai direto ao servidor
+    if (url.pathname.startsWith('/static/')) {
+        event.respondWith(
+            caches.match(event.request).then((cached) => {
+                if (cached) return cached;
+                return fetch(event.request).then((response) => {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                    return response;
+                });
+            })
+        );
+        return;
+    }
+
+    // Para páginas e dados: rede primeiro, cache só se offline
     event.respondWith(
-        caches.match(event.request).then((cached) => {
-            if (cached) return cached;
-            return fetch(event.request).then((response) => {
-                const clone = response.clone();
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                return response;
-            }).catch(() => caches.match('/cliente/'));
-        })
+        fetch(event.request).catch(() => caches.match(event.request))
     );
 });
 """

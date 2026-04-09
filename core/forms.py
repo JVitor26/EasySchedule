@@ -1,14 +1,12 @@
 import re
-import json
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from django.db.models import F
 
 from agendamentos.availability import list_available_slots
-from agendamentos.models import Agendamento, Pagamento, PlanoMensal, AgendamentoProduto
+from agendamentos.models import Agendamento, PlanoMensal
 from agendamentos.plans import (
     WEEKDAY_CHOICES,
     list_monthly_available_slots,
@@ -19,7 +17,6 @@ from empresas.business_profiles import get_business_profile
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
-from produtos.models import Produto
 from .notifications import notify_booking_created
 from empresas.models import Empresa
 
@@ -114,7 +111,6 @@ class PublicBookingForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
-    produtos_json = forms.CharField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, *args, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -406,17 +402,6 @@ class PublicBookingForm(forms.Form):
     def save(self):
         cliente = self._get_or_create_cliente()
         booking_type = self.cleaned_data["tipo_reserva"]
-        
-        # Processar produtos do carrinho
-        produtos_data = []
-        valor_produtos = 0
-        try:
-            if self.cleaned_data.get("produtos_json"):
-                produtos_data = json.loads(self.cleaned_data["produtos_json"])
-                valor_produtos = sum(float(item.get("preco_total", 0)) for item in produtos_data)
-        except (json.JSONDecodeError, ValueError):
-            produtos_data = []
-            valor_produtos = 0
 
         if booking_type == "pacote_mensal":
             plano = PlanoMensal(
@@ -446,7 +431,6 @@ class PublicBookingForm(forms.Form):
                 "tipo_reserva": "pacote_mensal",
                 "cliente": cliente,
                 "agendamento": plano.first_occurrence,
-                "pagamento": None,
                 "plano": plano,
             }
 
@@ -470,118 +454,11 @@ class PublicBookingForm(forms.Form):
                     self.add_error(form_field, message)
             raise
 
-        # Adicionar produtos ao agendamento
-        self._process_agendamento_produtos(agendamento, produtos_data)
-        
-        # Calcular valor do pagamento (serviço + produtos)
-        valor_pagamento = float(agendamento.servico.preco) + valor_produtos
-
-        # Atualizar ou criar pagamento
-        pagamento = Pagamento.objects.filter(agendamento=agendamento).first()
-        if not pagamento:
-            pagamento = Pagamento(
-                empresa=self.empresa,
-                agendamento=agendamento,
-                cliente=cliente,
-            )
-        pagamento.valor = valor_pagamento
-        pagamento.save()
-
         notify_booking_created(agendamento)
-        
+
         return {
             "tipo_reserva": "avulso",
             "cliente": cliente,
             "agendamento": agendamento,
-            "pagamento": pagamento,
             "plano": None,
         }
-
-    def _process_agendamento_produtos(self, agendamento, produtos_data):
-        """Processar produtos do carrinho e criar AgendamentoProduto records"""
-        for item in produtos_data:
-            try:
-                produto_id = int(item.get("produto_id"))
-                quantidade = int(item.get("quantidade", 1))
-                preco = float(item.get("preco"))
-                
-                produto = Produto.objects.get(pk=produto_id, empresa=self.empresa)
-                
-                # Verificar estoque
-                if produto.estoque_disponivel < quantidade:
-                    raise ValidationError(
-                        f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque_disponivel}"
-                    )
-                
-                # Reservar estoque
-                produto.estoque_reservado = F('estoque_reservado') + quantidade
-                produto.save()
-                
-                # Criar AgendamentoProduto
-                AgendamentoProduto.objects.create(
-                    empresa=self.empresa,
-                    agendamento=agendamento,
-                    produto=produto,
-                    quantidade=quantidade,
-                    preco_unitario=preco,
-                    pagamento_status="reservado",
-                )
-            except (ValueError, TypeError, Produto.DoesNotExist, ValidationError):
-                # Ignorar itens inválidos (foram validados no frontend)
-                continue
-
-
-class PublicCheckoutForm(forms.Form):
-    metodo = forms.ChoiceField(
-        choices=Pagamento.METODO_CHOICES,
-        widget=forms.RadioSelect,
-        initial="pix",
-    )
-    nome_pagador = forms.CharField(max_length=100)
-    ultimos_digitos = forms.CharField(max_length=4, required=False)
-    aceitar_termos = forms.BooleanField(required=True)
-
-    def __init__(self, *args, cobranca=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cobranca = cobranca
-        self.fields["metodo"].label = "Metodo de pagamento"
-        self.fields["nome_pagador"].label = "Nome do pagador"
-        self.fields["nome_pagador"].widget.attrs["placeholder"] = "Ex.: Maria Souza"
-        self.fields["ultimos_digitos"].label = "Ultimos 4 digitos do cartao"
-        self.fields["ultimos_digitos"].widget.attrs["placeholder"] = "1234"
-        self.fields["aceitar_termos"].label = "Confirmo que desejo concluir o pagamento por este checkout."
-
-        if cobranca is not None:
-            if getattr(cobranca, "cliente_id", None):
-                self.fields["nome_pagador"].initial = cobranca.cliente.nome
-
-            metodo_atual = getattr(cobranca, "metodo", None) or getattr(cobranca, "metodo_pagamento", None)
-            if metodo_atual:
-                self.fields["metodo"].initial = metodo_atual
-
-    def clean(self):
-        cleaned_data = super().clean()
-        metodo = cleaned_data.get("metodo")
-        ultimos_digitos = cleaned_data.get("ultimos_digitos", "").strip()
-
-        if metodo == "cartao":
-            if not ultimos_digitos:
-                self.add_error("ultimos_digitos", "Informe os ultimos 4 digitos do cartao.")
-            elif not ultimos_digitos.isdigit() or len(ultimos_digitos) != 4:
-                self.add_error("ultimos_digitos", "Use exatamente 4 numeros.")
-
-        return cleaned_data
-
-    @transaction.atomic
-    def save(self):
-        metodo = self.cleaned_data["metodo"]
-        detalhes = f"Pagamento confirmado por {self.cleaned_data['nome_pagador']}"
-
-        if metodo == "cartao":
-            detalhes = f"{detalhes} no cartao final {self.cleaned_data['ultimos_digitos']}"
-
-        self.cobranca.mark_as_paid(
-            metodo=metodo,
-            detalhes=detalhes,
-        )
-        return self.cobranca

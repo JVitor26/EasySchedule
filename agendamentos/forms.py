@@ -6,7 +6,7 @@ from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
 
-from .models import Agendamento, PAYMENT_METHOD_CHOICES, PlanoMensal
+from .models import Agendamento, PlanoMensal
 from .plans import WEEKDAY_CHOICES
 
 
@@ -27,7 +27,6 @@ class AgendamentoForm(forms.ModelForm):
         self.fields["observacoes"].label = profile["appointment_notes_label"]
         self.fields["observacoes"].widget.attrs["placeholder"] = profile["appointment_notes_placeholder"]
         self.fields["status"].label = f"Status do {profile['appointment_term_singular'].lower()}"
-        self.fields["forma_pagamento"].label = "Forma de pagamento"
 
         if empresa is not None:
             self.fields["cliente"].queryset = Pessoa.objects.filter(empresa=empresa).order_by("nome")
@@ -47,7 +46,6 @@ class AgendamentoForm(forms.ModelForm):
             "hora",
             "observacoes",
             "status",
-            "forma_pagamento",
         ]
         widgets = {
             "data": forms.DateInput(attrs={"type": "date"}),
@@ -70,7 +68,7 @@ class PlanoMensalForm(forms.ModelForm):
     registrar_pagamento_agora = forms.BooleanField(required=False)
     metodo_pagamento_inicial = forms.ChoiceField(
         required=False,
-        choices=[("", "Selecione")] + list(PAYMENT_METHOD_CHOICES),
+        choices=[("", "Selecione")] + list(PlanoMensal.METODO_PAGAMENTO_CHOICES),
     )
 
     def __init__(self, *args, empresa=None, **kwargs):
