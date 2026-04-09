@@ -92,4 +92,24 @@
     </form>
   </div>
 </div>
+
+<script>
+(function () {
+  function parseDecimal(val) {
+    return parseFloat((val || "").replace(",", ".")) || 0;
+  }
+  function updateCusto() {
+    var preco = parseDecimal(document.getElementById("id_preco").value);
+    var compra = parseDecimal(document.getElementById("id_valor_compra").value);
+    var custoEl = document.getElementById("id_custo");
+    if (preco > 0 && compra > 0) {
+      custoEl.value = (preco - compra).toFixed(2);
+    }
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("id_preco").addEventListener("input", updateCusto);
+    document.getElementById("id_valor_compra").addEventListener("input", updateCusto);
+  });
+})();
+</script>
 {% endblock %}

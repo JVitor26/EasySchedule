@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django import forms
 
 from pessoa.models import Pessoa
@@ -19,6 +20,9 @@ class ProdutoForm(forms.ModelForm):
         self.fields["custo"].widget.attrs["placeholder"] = "0,00"
         self.fields["valor_venda"].label = "Valor de venda ao cliente"
         self.fields["valor_venda"].widget.attrs["placeholder"] = "0,00"
+        self.fields["valor_compra"].required = False
+        self.fields["custo"].required = False
+        self.fields["valor_venda"].required = False
         self.fields["estoque"].label = "Quantidade em estoque"
         self.fields["estoque"].widget.attrs["placeholder"] = "0"
         self.fields["descricao"].label = "Descricao"
@@ -29,6 +33,20 @@ class ProdutoForm(forms.ModelForm):
         self.fields["foto"].required = False
         self.fields["ativo"].label = "Produto ativo para venda"
         self.fields["destaque_publico"].label = "Mostrar este produto no portal do cliente"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        preco = cleaned_data.get("preco") or Decimal("0")
+        valor_compra = cleaned_data.get("valor_compra") or Decimal("0")
+        custo = cleaned_data.get("custo")
+        valor_venda = cleaned_data.get("valor_venda")
+
+        if custo in (None, ""):
+            cleaned_data["custo"] = preco - valor_compra
+        if valor_venda in (None, ""):
+            cleaned_data["valor_venda"] = preco
+
+        return cleaned_data
 
     class Meta:
         model = Produto
@@ -97,4 +115,3 @@ class VendaForm(forms.ModelForm):
             "data_pagamento": forms.DateInput(attrs={"type": "date"}),
             "observacoes": forms.Textarea(attrs={"rows": 3}),
         }
-

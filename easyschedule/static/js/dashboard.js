@@ -85,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const trackedFields = [elements.dataInicio, elements.dataFim].filter(Boolean);
+    let currentSector = "agendamentos";
 
     function formatCurrency(value) {
         return moneyFormatter.format(Number(value) || 0);
@@ -630,16 +631,30 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    elements.filterButton.addEventListener("click", carregarDashboard);
+    elements.filterButton.addEventListener("click", () => {
+        if (currentSector === "vendas") {
+            carregarDashboardVendas();
+            return;
+        }
+        carregarDashboard();
+    });
     elements.clearButton.addEventListener("click", () => {
         elements.dataInicio.value = "";
         elements.dataFim.value = "";
+        if (currentSector === "vendas") {
+            carregarDashboardVendas();
+            return;
+        }
         carregarDashboard();
     });
 
     trackedFields.forEach((field) => {
         field.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
+                if (currentSector === "vendas") {
+                    carregarDashboardVendas();
+                    return;
+                }
                 carregarDashboard();
             }
         });
@@ -649,6 +664,236 @@ document.addEventListener("DOMContentLoaded", () => {
         if (dashboardPayload) {
             renderDashboard(dashboardPayload);
         }
+        if (dashboardVendasPayload) {
+            renderVendasDashboard(dashboardVendasPayload);
+        }
+    });
+
+    // ═══ SECTOR TABS ═══
+    let graficoPrevisaoRecebimentos = null;
+    let graficoProdutosMaisVendidos = null;
+    let graficoClientesTop = null;
+    let dashboardVendasPayload = null;
+
+    const vendasElements = {
+        vendasUrl: reportPage.dataset.vendasUrl,
+        vendasTotal: document.getElementById("vendasTotal"),
+        vendasTotalAux: document.getElementById("vendasTotalAux"),
+        vendasPendentes: document.getElementById("vendasPendentes"),
+        vendasPendentesAux: document.getElementById("vendasPendentesAux"),
+        vendasAtrasadas: document.getElementById("vendasAtrasadas"),
+        vendasAtrasadasAux: document.getElementById("vendasAtrasadasAux"),
+        previsaoRecebimentos: document.getElementById("previsaoRecebimentos"),
+        previsaoRecebimentosAux: document.getElementById("previsaoRecebimentosAux"),
+        tabelaProdutosMaisVendidos: document.getElementById("tabelaProdutosMaisVendidos"),
+        tabelaClientesTop: document.getElementById("tabelaClientesTop"),
+        graficoPrevisaoRecebimentos: document.getElementById("graficoPrevisaoRecebimentos"),
+        graficoProdutosMaisVendidos: document.getElementById("graficoProdutosMaisVendidos"),
+        graficoClientesTop: document.getElementById("graficoClientesTop"),
+    };
+
+    function createPrevisaoRecebimentosChart(labels, values) {
+        const palette = getThemePalette();
+        graficoPrevisaoRecebimentos = destroyChart(graficoPrevisaoRecebimentos);
+        if (!vendasElements.graficoPrevisaoRecebimentos) return;
+        graficoPrevisaoRecebimentos = new Chart(vendasElements.graficoPrevisaoRecebimentos, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    label: "A receber (R$)",
+                    data: values,
+                    borderRadius: 10,
+                    backgroundColor: palette.accent2,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label(ctx) { return formatCurrency(ctx.raw); } } },
+                },
+                scales: {
+                    x: commonScale("x"),
+                    y: { ...commonScale("y"), beginAtZero: true, ticks: { color: getThemePalette().textMuted, callback: (v) => formatCurrency(v) } },
+                },
+            },
+        });
+    }
+
+    function createProdutosMaisVendidosChart(labels, values) {
+        const palette = getThemePalette();
+        graficoProdutosMaisVendidos = destroyChart(graficoProdutosMaisVendidos);
+        if (!vendasElements.graficoProdutosMaisVendidos) return;
+        graficoProdutosMaisVendidos = new Chart(vendasElements.graficoProdutosMaisVendidos, {
+            type: "doughnut",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    borderWidth: 0,
+                    backgroundColor: [palette.accent, palette.accent2, palette.accent3, palette.info, palette.warning, palette.danger, palette.success],
+                    hoverOffset: 8,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { color: palette.textSecondary, padding: 16 } },
+                    tooltip: { callbacks: { label(ctx) { return `${ctx.label}: ${formatNumber(ctx.raw)} vendas`; } } },
+                },
+                cutout: "60%",
+            },
+        });
+    }
+
+    function createClientesTopChart(labels, values) {
+        const palette = getThemePalette();
+        graficoClientesTop = destroyChart(graficoClientesTop);
+        if (!vendasElements.graficoClientesTop) return;
+        graficoClientesTop = new Chart(vendasElements.graficoClientesTop, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    label: "Total comprado (R$)",
+                    data: values,
+                    borderRadius: 10,
+                    backgroundColor: [palette.accent, palette.accent2, palette.accent3, palette.info, palette.warning, palette.success],
+                }],
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label(ctx) { return formatCurrency(ctx.raw); } } },
+                },
+                scales: {
+                    x: { ...commonScale("x"), beginAtZero: true, ticks: { color: getThemePalette().textMuted, callback: (v) => formatCurrency(v) } },
+                    y: commonScale("y"),
+                },
+            },
+        });
+    }
+
+    function renderVendasDashboard(payload) {
+        if (!payload) return;
+        dashboardVendasPayload = payload;
+        const kpis = payload.kpis || {};
+        const previsao = payload.previsao_recebimentos || {};
+        const produtos = Array.isArray(payload.produtos_mais_vendidos) ? payload.produtos_mais_vendidos : [];
+        const clientes = Array.isArray(payload.clientes_top) ? payload.clientes_top : [];
+
+        if (vendasElements.vendasTotal) {
+            vendasElements.vendasTotal.textContent = formatCurrency(kpis.total || 0);
+            vendasElements.vendasTotalAux.textContent = pluralize(kpis.quantidade || 0, "venda no período", "vendas no período");
+        }
+        if (vendasElements.vendasPendentes) {
+            vendasElements.vendasPendentes.textContent = formatCurrency(kpis.pendentes_total || 0);
+            vendasElements.vendasPendentesAux.textContent = pluralize(kpis.pendentes_qtd || 0, "venda sem pagamento", "vendas sem pagamento");
+        }
+        if (vendasElements.vendasAtrasadas) {
+            vendasElements.vendasAtrasadas.textContent = formatCurrency(kpis.atrasadas_total || 0);
+            vendasElements.vendasAtrasadasAux.textContent = pluralize(kpis.atrasadas_qtd || 0, "venda em atraso", "vendas em atraso");
+        }
+        if (vendasElements.previsaoRecebimentos) {
+            vendasElements.previsaoRecebimentos.textContent = formatCurrency(previsao.total_pendente || 0);
+            vendasElements.previsaoRecebimentosAux.textContent = `${pluralize(previsao.qtd_pendente || 0, "venda pendente", "vendas pendentes")} a receber`;
+        }
+
+        const porMes = Array.isArray(previsao.por_mes) ? previsao.por_mes : [];
+        createPrevisaoRecebimentosChart(
+            porMes.map((m) => m.mes || "—"),
+            porMes.map((m) => Number(m.total) || 0)
+        );
+
+        createProdutosMaisVendidosChart(
+            produtos.map((p) => p.nome),
+            produtos.map((p) => Number(p.total) || 0)
+        );
+
+        createClientesTopChart(
+            clientes.map((c) => c.nome),
+            clientes.map((c) => Number(c.valor) || 0)
+        );
+
+        if (vendasElements.tabelaProdutosMaisVendidos) {
+            if (!produtos.length) {
+                renderEmptyRow(vendasElements.tabelaProdutosMaisVendidos, 3, "Nenhuma venda no período.");
+            } else {
+                vendasElements.tabelaProdutosMaisVendidos.innerHTML = "";
+                produtos.forEach((p) => {
+                    const row = document.createElement("tr");
+                    row.appendChild(createCell(p.nome));
+                    row.appendChild(createCell(formatNumber(p.total)));
+                    row.appendChild(createCell(formatCurrency(p.valor)));
+                    vendasElements.tabelaProdutosMaisVendidos.appendChild(row);
+                });
+            }
+        }
+
+        if (vendasElements.tabelaClientesTop) {
+            if (!clientes.length) {
+                renderEmptyRow(vendasElements.tabelaClientesTop, 3, "Nenhum cliente no período.");
+            } else {
+                vendasElements.tabelaClientesTop.innerHTML = "";
+                clientes.forEach((c) => {
+                    const row = document.createElement("tr");
+                    row.appendChild(createCell(c.nome));
+                    row.appendChild(createCell(formatNumber(c.total)));
+                    row.appendChild(createCell(formatCurrency(c.valor)));
+                    vendasElements.tabelaClientesTop.appendChild(row);
+                });
+            }
+        }
+
+        elements.updatedAt.textContent = `Atualizado em ${dateTimeFormatter.format(new Date())}`;
+    }
+
+    async function carregarDashboardVendas() {
+        if (!vendasElements.vendasUrl) return;
+        const url = new URL(vendasElements.vendasUrl, window.location.origin);
+        if (elements.dataInicio.value) url.searchParams.set("data_inicio", elements.dataInicio.value);
+        if (elements.dataFim.value) url.searchParams.set("data_fim", elements.dataFim.value);
+
+        setLoadingState(true);
+        setFeedback("Carregando indicadores de vendas...", "is-loading");
+        try {
+            const response = await fetch(url.toString(), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+            if (!response.ok) throw new Error("Não foi possível carregar os dados de vendas.");
+            renderVendasDashboard(await response.json());
+            setFeedback("Indicadores de vendas atualizados.");
+        } catch (error) {
+            graficoPrevisaoRecebimentos = destroyChart(graficoPrevisaoRecebimentos);
+            graficoProdutosMaisVendidos = destroyChart(graficoProdutosMaisVendidos);
+            graficoClientesTop = destroyChart(graficoClientesTop);
+            setFeedback(error.message, "is-error");
+        } finally {
+            setLoadingState(false);
+        }
+    }
+
+    function switchSector(sector) {
+        currentSector = sector;
+        document.querySelectorAll(".sector-tab").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.sector === sector);
+        });
+        document.querySelectorAll("[data-sector-section]").forEach((el) => {
+            el.hidden = el.dataset.sectorSection !== sector;
+        });
+        if (sector === "vendas") {
+            carregarDashboardVendas();
+        } else {
+            carregarDashboard();
+        }
+    }
+
+    document.querySelectorAll(".sector-tab").forEach((btn) => {
+        btn.addEventListener("click", () => switchSector(btn.dataset.sector));
     });
 
     applyKpiVisibility();

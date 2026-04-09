@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from datetime import date as date_type
 from .models import Relatorio
 from .services import RelatorioService
 from rest_framework.views import APIView
@@ -60,6 +61,30 @@ def get_report_card_definitions(empresa):
             'description': 'Total de planos contratados ainda não pagos.',
             'group': 'right',
         },
+        {
+            'key': 'vendas_total',
+            'label': 'Total de vendas',
+            'description': 'Valor total de todas as vendas de produtos no período.',
+            'group': 'vendas',
+        },
+        {
+            'key': 'vendas_pendentes',
+            'label': 'Vendas pendentes',
+            'description': 'Vendas realizadas mas sem pagamento registrado.',
+            'group': 'vendas',
+        },
+        {
+            'key': 'vendas_atrasadas',
+            'label': 'Vendas atrasadas',
+            'description': 'Vendas antigas ainda sem pagamento (data da venda já passou).',
+            'group': 'vendas',
+        },
+        {
+            'key': 'previsao_recebimentos',
+            'label': 'Previsão de recebimentos',
+            'description': 'Total a receber de vendas com pagamento pendente.',
+            'group': 'vendas',
+        },
     ]
 
 
@@ -93,6 +118,7 @@ def relatorio_page(request):
     cards_by_group = {
         'left': [card for card in cards if card['group'] == 'left'],
         'right': [card for card in cards if card['group'] == 'right'],
+        'vendas': [card for card in cards if card['group'] == 'vendas'],
     }
 
     return render(request, 'relatorios/relatorio.html', {
@@ -152,5 +178,33 @@ class ExecutarRelatorioView(APIView):
         dados = RelatorioService.executar(relatorio)
 
         return Response(dados)
-    
-    
+
+
+@login_required
+def dashboard_vendas(request):
+    if is_profissional_user(request.user):
+        return JsonResponse({'detail': 'Perfil sem permissao para relatorios.'}, status=403)
+
+    empresa = get_active_empresa(request)
+    if not empresa:
+        return JsonResponse({'detail': 'Empresa não selecionada.'}, status=400)
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return date_type.fromisoformat(value)
+        except ValueError:
+            return None
+
+    data_inicio = parse_date(request.GET.get('data_inicio'))
+    data_fim = parse_date(request.GET.get('data_fim'))
+
+    dados = {
+        'kpis': RelatorioService.vendas_kpis(empresa, data_inicio, data_fim),
+        'produtos_mais_vendidos': RelatorioService.produtos_mais_vendidos(empresa, data_inicio, data_fim),
+        'clientes_top': RelatorioService.clientes_top_compradores(empresa, data_inicio, data_fim),
+        'previsao_recebimentos': RelatorioService.previsao_recebimentos_vendas(empresa, data_inicio, data_fim),
+    }
+
+    return JsonResponse(dados)

@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="{% static 'css/pages.css' %}">
 <link rel="stylesheet" href="{% static 'css/relatorio.css' %}">
 
-<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}" data-visible-kpis="{{ selected_report_cards|join:',' }}">
+<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}" data-vendas-url="{% url 'relatorio_dashboard_vendas' %}" data-visible-kpis="{{ selected_report_cards|join:',' }}">
   <div class="report-shell">
     <header class="report-header">
       <div class="report-heading">
@@ -28,8 +28,13 @@
       <div class="report-card-header">
         <div>
           <h2>Filtros</h2>
-          <p>Selecione um intervalo para recalcular os indicadores do relatório.</p>
+          <p>Selecione um setor e intervalo para recalcular os indicadores do relatório.</p>
         </div>
+      </div>
+
+      <div class="sector-tabs">
+        <button type="button" class="sector-tab active" data-sector="agendamentos">Agendamentos</button>
+        <button type="button" class="sector-tab" data-sector="vendas">Vendas de Produtos</button>
       </div>
 
       <div class="report-filters-grid">
@@ -88,13 +93,26 @@
           {% endfor %}
         </div>
 
+        <div class="report-settings-column">
+          <h3>Vendas de produtos</h3>
+          {% for card in cards_by_group.vendas %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+
         <div class="report-settings-actions">
           <button type="submit" class="btn-success">Salvar configuração</button>
         </div>
       </form>
     </section>
 
-    <section class="report-metrics">
+    <section class="report-metrics" data-sector-section="agendamentos">
       <article class="report-card metric-card metric-kpi" data-kpi-key="faturamento">
         <span class="metric-label">Faturamento</span>
         <strong class="metric-value" id="faturamento">R$ 0,00</strong>
@@ -138,7 +156,34 @@
       </article>
     </section>
 
-    <section class="report-grid">
+    <!-- ═══ KPIs VENDAS ═══ -->
+    <section class="report-metrics" data-sector-section="vendas" hidden>
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_total">
+        <span class="metric-label">Total de vendas</span>
+        <strong class="metric-value" id="vendasTotal">R$ 0,00</strong>
+        <small class="metric-note" id="vendasTotalAux">0 vendas no período</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_pendentes">
+        <span class="metric-label">Vendas pendentes</span>
+        <strong class="metric-value" id="vendasPendentes">R$ 0,00</strong>
+        <small class="metric-note" id="vendasPendentesAux">0 vendas sem pagamento</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_atrasadas">
+        <span class="metric-label">Vendas atrasadas</span>
+        <strong class="metric-value" id="vendasAtrasadas">R$ 0,00</strong>
+        <small class="metric-note" id="vendasAtrasadasAux">0 vendas com pagamento em atraso</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_recebimentos">
+        <span class="metric-label">Previsão de recebimentos</span>
+        <strong class="metric-value" id="previsaoRecebimentos">R$ 0,00</strong>
+        <small class="metric-note" id="previsaoRecebimentosAux">Total a receber (vendas sem pagamento)</small>
+      </article>
+    </section>
+
+    <section class="report-grid" data-sector-section="agendamentos">
       <article class="report-card report-card-wide">
         <div class="report-card-header">
           <div>
@@ -244,6 +289,65 @@
 
         <div class="chart-wrapper chart-wrapper-sm">
           <canvas id="graficoPrevisaoReceita"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <!-- ═══ CHARTS VENDAS ═══ -->
+    <section class="report-grid" data-sector-section="vendas" hidden>
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de recebimentos por mês</h2>
+            <p>Vendas com pagamento pendente agrupadas por mês da venda.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="graficoPrevisaoRecebimentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Produtos mais vendidos</h2>
+            <p>Distribuição por volume de vendas no período.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoProdutosMaisVendidos"></canvas>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr><th>Produto</th><th>Qtd.</th><th>Valor total</th></tr>
+            </thead>
+            <tbody id="tabelaProdutosMaisVendidos">
+              <tr><td colspan="3" class="report-empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Clientes que mais compram</h2>
+            <p>Ranking de clientes por volume de compras.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoClientesTop"></canvas>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr><th>Cliente</th><th>Compras</th><th>Valor total</th></tr>
+            </thead>
+            <tbody id="tabelaClientesTop">
+              <tr><td colspan="3" class="report-empty">Carregando...</td></tr>
+            </tbody>
+          </table>
         </div>
       </article>
     </section>

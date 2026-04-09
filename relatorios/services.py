@@ -1,5 +1,6 @@
 from agendamentos.models import Agendamento
 from django.db.models import Sum, Count
+from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from datetime import timedelta
 from agendamentos.models import PlanoMensal
@@ -180,6 +181,91 @@ class RelatorioService:
             'total_previsto': round(total_agendamentos_previstos + total_planos_pendentes, 2),
         }
 
+
+    # 🛒 VENDAS — KPIs gerais
+    @staticmethod
+    def vendas_kpis(empresa, data_inicio=None, data_fim=None):
+        from produtos.models import VendaProduto
+        hoje = timezone.localdate()
+        qs = VendaProduto.objects.filter(empresa=empresa)
+        if data_inicio:
+            qs = qs.filter(data_venda__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_venda__lte=data_fim)
+
+        agg_total = qs.aggregate(total=Sum("valor_venda"), qtd=Count("id"))
+        agg_recebidas = qs.filter(data_pagamento__isnull=False).aggregate(total=Sum("valor_venda"), qtd=Count("id"))
+        agg_pendentes = qs.filter(data_pagamento__isnull=True).aggregate(total=Sum("valor_venda"), qtd=Count("id"))
+        agg_atrasadas = qs.filter(data_pagamento__isnull=True, data_venda__lt=hoje).aggregate(total=Sum("valor_venda"), qtd=Count("id"))
+
+        return {
+            "total": round(float(agg_total["total"] or 0), 2),
+            "quantidade": agg_total["qtd"] or 0,
+            "recebidas_total": round(float(agg_recebidas["total"] or 0), 2),
+            "recebidas_qtd": agg_recebidas["qtd"] or 0,
+            "pendentes_total": round(float(agg_pendentes["total"] or 0), 2),
+            "pendentes_qtd": agg_pendentes["qtd"] or 0,
+            "atrasadas_total": round(float(agg_atrasadas["total"] or 0), 2),
+            "atrasadas_qtd": agg_atrasadas["qtd"] or 0,
+        }
+
+    # 🏆 VENDAS — Produtos mais vendidos
+    @staticmethod
+    def produtos_mais_vendidos(empresa, data_inicio=None, data_fim=None, limit=8):
+        from produtos.models import VendaProduto
+        qs = VendaProduto.objects.filter(empresa=empresa)
+        if data_inicio:
+            qs = qs.filter(data_venda__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_venda__lte=data_fim)
+        dados = list(
+            qs.values("produto__nome")
+            .annotate(total=Count("id"), valor=Sum("valor_venda"))
+            .order_by("-total")[:limit]
+        )
+        return [{"nome": d["produto__nome"] or "—", "total": d["total"], "valor": round(float(d["valor"] or 0), 2)} for d in dados]
+
+    # 👥 VENDAS — Clientes que mais compram
+    @staticmethod
+    def clientes_top_compradores(empresa, data_inicio=None, data_fim=None, limit=8):
+        from produtos.models import VendaProduto
+        qs = VendaProduto.objects.filter(empresa=empresa)
+        if data_inicio:
+            qs = qs.filter(data_venda__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_venda__lte=data_fim)
+        dados = list(
+            qs.values("cliente__nome", "cliente_nome_avulso")
+            .annotate(total=Count("id"), valor=Sum("valor_venda"))
+            .order_by("-total")[:limit]
+        )
+        result = []
+        for d in dados:
+            nome = d.get("cliente__nome") or d.get("cliente_nome_avulso") or "Cliente avulso"
+            result.append({"nome": nome, "total": d["total"], "valor": round(float(d["valor"] or 0), 2)})
+        return result
+
+    # 📅 VENDAS — Previsão de recebimentos futuros
+    @staticmethod
+    def previsao_recebimentos_vendas(empresa, data_inicio=None, data_fim=None):
+        from produtos.models import VendaProduto
+        qs = VendaProduto.objects.filter(empresa=empresa, data_pagamento__isnull=True)
+        if data_inicio:
+            qs = qs.filter(data_venda__gte=data_inicio)
+        if data_fim:
+            qs = qs.filter(data_venda__lte=data_fim)
+        agg = qs.aggregate(total=Sum("valor_venda"), qtd=Count("id"))
+        por_mes = list(
+            qs.annotate(mes=TruncMonth("data_venda"))
+            .values("mes")
+            .annotate(total=Sum("valor_venda"), qtd=Count("id"))
+            .order_by("mes")[:12]
+        )
+        return {
+            "total_pendente": round(float(agg["total"] or 0), 2),
+            "qtd_pendente": agg["qtd"] or 0,
+            "por_mes": [{"mes": str(d["mes"])[:7] if d["mes"] else None, "total": round(float(d["total"] or 0), 2), "qtd": d["qtd"]} for d in por_mes],
+        }
 
     # 🔥 EXECUTOR PRINCIPAL
     @staticmethod
