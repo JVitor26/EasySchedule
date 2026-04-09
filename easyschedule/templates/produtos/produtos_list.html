@@ -17,6 +17,9 @@
 
     <div class="page-actions">
       <a href="{% url 'produtos_form' %}" class="btn btn-success">Novo produto</a>
+      {% if is_owner %}
+      <a href="{% url 'vendas_list' %}" class="btn btn-primary">Vendas</a>
+      {% endif %}
     </div>
   </header>
 

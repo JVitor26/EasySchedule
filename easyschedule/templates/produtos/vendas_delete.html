@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Excluir venda{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<div class="page-container">
+  <div class="form-card">
+    <h2>Excluir venda</h2>
+    <p>Tem certeza que deseja excluir a venda de <strong>{{ venda.produto.nome }}</strong>
+      ({{ venda.quantidade }} unidade{{ venda.quantidade|pluralize }}) registrada em
+      <strong>{{ venda.data_venda|date:"d/m/Y" }}</strong>?
+    </p>
+    <p>Essa ação não pode ser desfeita.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-danger">Sim, excluir</button>
+        <a href="{% url 'vendas_list' %}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

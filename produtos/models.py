@@ -1,6 +1,7 @@
 from django.db import models
 
 from empresas.models import Empresa
+from pessoa.models import Pessoa
 
 
 class Produto(models.Model):
@@ -28,4 +29,60 @@ class Produto(models.Model):
 
     def __str__(self):
         return self.nome
+
+
+class VendaProduto(models.Model):
+    METODO_PAGAMENTO_CHOICES = [
+        ("dinheiro", "Dinheiro"),
+        ("pix", "Pix"),
+        ("cartao_debito", "Cartão de Débito"),
+        ("cartao_credito", "Cartão de Crédito"),
+        ("transferencia", "Transferência"),
+        ("fiado", "Fiado"),
+    ]
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name="vendas_produtos")
+    produto = models.ForeignKey(Produto, on_delete=models.PROTECT, related_name="vendas")
+    cliente = models.ForeignKey(
+        Pessoa,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compras_produtos",
+    )
+    cliente_nome_avulso = models.CharField(max_length=255, blank=True, help_text="Nome do cliente se não cadastrado")
+    quantidade = models.PositiveIntegerField(default=1)
+    custo = models.DecimalField(max_digits=10, decimal_places=2, help_text="Custo de aquisição do produto")
+    valor_mercado = models.DecimalField(max_digits=10, decimal_places=2, help_text="Valor de referência de mercado")
+    valor_final = models.DecimalField(max_digits=10, decimal_places=2, help_text="Valor cobrado na venda")
+    metodo_pagamento = models.CharField(max_length=20, choices=METODO_PAGAMENTO_CHOICES, blank=True)
+    data_venda = models.DateField(help_text="Data em que a venda foi realizada")
+    data_recebimento = models.DateField(null=True, blank=True, help_text="Data em que o pagamento foi recebido")
+    observacoes = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-data_venda", "-criado_em"]
+
+    @property
+    def nome_cliente(self):
+        if self.cliente:
+            return self.cliente.nome
+        return self.cliente_nome_avulso or "—"
+
+    @property
+    def lucro(self):
+        return (self.valor_final - self.custo) * self.quantidade
+
+    @property
+    def total_venda(self):
+        return self.valor_final * self.quantidade
+
+    @property
+    def recebido(self):
+        return self.data_recebimento is not None
+
+    def __str__(self):
+        return f"{self.produto.nome} × {self.quantidade} em {self.data_venda}"
 
