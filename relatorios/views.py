@@ -14,6 +14,12 @@ from empresas.permissions import is_profissional_user
 from dashboard.models import DashboardPreference
 
 
+def _is_mobile_request(request):
+    user_agent = (request.META.get('HTTP_USER_AGENT') or '').lower()
+    mobile_tokens = ('mobile', 'android', 'iphone', 'ipad')
+    return any(token in user_agent for token in mobile_tokens)
+
+
 def get_report_card_definitions(empresa):
     profile = empresa.business_profile
     appointment_term = profile.get('appointment_term_plural', 'Agendamentos')
@@ -121,7 +127,9 @@ def relatorio_page(request):
         'vendas': [card for card in cards if card['group'] == 'vendas'],
     }
 
-    return render(request, 'relatorios/relatorio.html', {
+    template_name = 'relatorios/relatorio_mobile.html' if _is_mobile_request(request) else 'relatorios/relatorio.html'
+
+    return render(request, template_name, {
         'cards_by_group': cards_by_group,
         'selected_report_cards': selected_cards,
     })

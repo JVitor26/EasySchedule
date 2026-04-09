@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Relatórios - EasySchedule{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+<link rel="stylesheet" href="{% static 'css/relatorio.css' %}">
+<link rel="stylesheet" href="{% static 'css/relatorio_mobile.css' %}">
+
+<section class="report-page" data-dashboard-url="{% url 'relatorio_dashboard' %}" data-vendas-url="{% url 'relatorio_dashboard_vendas' %}" data-visible-kpis="{{ selected_report_cards|join:',' }}">
+  <div class="report-shell">
+    <header class="report-header">
+      <div class="report-heading">
+        <p class="report-eyebrow">Painel analítico</p>
+        <h1>Relatórios</h1>
+        <p class="report-subtitle">
+          Acompanhe faturamento, volume de atendimentos, cancelamentos e desempenho dos seus profissionais
+          em um único painel.
+        </p>
+      </div>
+
+      <aside class="report-period-card">
+        <span class="report-period-label">Período analisado</span>
+        <strong id="reportPeriod">Período completo</strong>
+        <small id="reportUpdatedAt">Aguardando atualização</small>
+      </aside>
+    </header>
+
+    <section class="report-card report-filters">
+      <div class="report-card-header">
+        <div>
+          <h2>Filtros</h2>
+          <p>Selecione um setor e intervalo para recalcular os indicadores do relatório.</p>
+        </div>
+      </div>
+
+      <div class="sector-tabs">
+        <button type="button" class="sector-tab active" data-sector="agendamentos">Agendamentos</button>
+        <button type="button" class="sector-tab" data-sector="vendas">Vendas de Produtos</button>
+      </div>
+
+      <div class="report-filters-grid">
+        <div class="filter-field">
+          <label for="data_inicio">Data inicial</label>
+          <input type="date" id="data_inicio" name="data_inicio">
+        </div>
+
+        <div class="filter-field">
+          <label for="data_fim">Data final</label>
+          <input type="date" id="data_fim" name="data_fim">
+        </div>
+
+        <div class="report-actions">
+          <button type="button" class="btn-success" id="filtrarRelatorio">Atualizar relatório</button>
+          <button type="button" class="btn-secondary" id="limparFiltros">Limpar período</button>
+        </div>
+
+        <p class="report-feedback" id="reportFeedback" role="status">Carregando indicadores...</p>
+      </div>
+    </section>
+
+    <details class="report-card report-mobile-settings">
+      <summary>Configurar KPIs visíveis</summary>
+      <form method="post" class="report-settings-grid">
+        {% csrf_token %}
+        <div class="report-settings-column">
+          <h3>Agendamentos</h3>
+          {% for card in cards_by_group.left %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+          {% for card in cards_by_group.right %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="report-settings-column">
+          <h3>Vendas</h3>
+          {% for card in cards_by_group.vendas %}
+          <label class="report-setting-item">
+            <input type="checkbox" name="report_cards" value="{{ card.key }}" {% if card.key in selected_report_cards %}checked{% endif %}>
+            <span>
+              <strong>{{ card.label }}</strong>
+              <small>{{ card.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="report-settings-actions">
+          <button type="submit" class="btn-success">Salvar configuração</button>
+        </div>
+      </form>
+    </details>
+
+    <section class="report-metrics" data-sector-section="agendamentos">
+      <article class="report-card metric-card metric-kpi" data-kpi-key="faturamento">
+        <span class="metric-label">Faturamento</span>
+        <strong class="metric-value" id="faturamento">R$ 0,00</strong>
+        <small class="metric-note" id="faturamentoAux">0 atendimentos finalizados</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="agendamentos">
+        <span class="metric-label">Agendamentos</span>
+        <strong class="metric-value" id="agendamentos">0</strong>
+        <small class="metric-note" id="agendamentosAux">0 registros no período</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="cancelamentos">
+        <span class="metric-label">Cancelamentos</span>
+        <strong class="metric-value" id="cancelamentos">0%</strong>
+        <small class="metric-note" id="cancelamentosAux">0 cancelamentos no período</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="ticket">
+        <span class="metric-label">Ticket médio</span>
+        <strong class="metric-value" id="ticket">R$ 0,00</strong>
+        <small class="metric-note" id="ticketAux">Média por atendimento finalizado</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_agendamentos">
+        <span class="metric-label">Previsão de agendamentos</span>
+        <strong class="metric-value" id="previsaoAgendamentos">0</strong>
+        <small class="metric-note" id="previsaoAgendamentosAux">Sem previsão no período futuro</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_receita">
+        <span class="metric-label">Previsão de receita</span>
+        <strong class="metric-value" id="previsaoReceita">R$ 0,00</strong>
+        <small class="metric-note" id="previsaoReceitaAux">Inclui agendamentos previstos e planos pendentes</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="planos_pendentes">
+        <span class="metric-label">Planos pendentes</span>
+        <strong class="metric-value" id="planosPendentes">R$ 0,00</strong>
+        <small class="metric-note" id="planosPendentesAux">Total previsto de planos contratados ainda sem pagamento</small>
+      </article>
+    </section>
+
+    <!-- ═══ KPIs VENDAS ═══ -->
+    <section class="report-metrics" data-sector-section="vendas" hidden>
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_total">
+        <span class="metric-label">Total de vendas</span>
+        <strong class="metric-value" id="vendasTotal">R$ 0,00</strong>
+        <small class="metric-note" id="vendasTotalAux">0 vendas no período</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_pendentes">
+        <span class="metric-label">Vendas pendentes</span>
+        <strong class="metric-value" id="vendasPendentes">R$ 0,00</strong>
+        <small class="metric-note" id="vendasPendentesAux">0 vendas sem pagamento</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="vendas_atrasadas">
+        <span class="metric-label">Vendas atrasadas</span>
+        <strong class="metric-value" id="vendasAtrasadas">R$ 0,00</strong>
+        <small class="metric-note" id="vendasAtrasadasAux">0 vendas com pagamento em atraso</small>
+      </article>
+
+      <article class="report-card metric-card metric-kpi" data-kpi-key="previsao_recebimentos">
+        <span class="metric-label">Previsão de recebimentos</span>
+        <strong class="metric-value" id="previsaoRecebimentos">R$ 0,00</strong>
+        <small class="metric-note" id="previsaoRecebimentosAux">Total a receber (vendas sem pagamento)</small>
+      </article>
+    </section>
+
+    <section class="report-grid" data-sector-section="agendamentos">
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Agendamentos por dia</h2>
+            <p>Evolução do volume de atendimentos no período selecionado.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper">
+          <canvas id="graficoAgendamentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Faturamento por profissional</h2>
+            <p>Veja quem mais contribuiu para o resultado.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoProfissionais"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Profissionais em destaque</h2>
+            <p>Ranking com quantidade de atendimentos e faturamento.</p>
+          </div>
+        </div>
+
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Profissional</th>
+                <th>Atendimentos</th>
+                <th>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaProfissionais">
+              <tr>
+                <td colspan="3" class="report-empty">Carregando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Serviços mais vendidos</h2>
+            <p>Distribuição por volume de atendimentos concluídos.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoServicos"></canvas>
+        </div>
+
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Serviço</th>
+                <th>Qtd.</th>
+                <th>Faturamento</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaServicos">
+              <tr>
+                <td colspan="3" class="report-empty">Carregando dados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de agendamentos</h2>
+            <p>Tendência de volume futuro baseada nos atendimentos já marcados.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper">
+          <canvas id="graficoPrevisaoAgendamentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de valor</h2>
+            <p>Composição entre agendamentos previstos e planos pendentes.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoPrevisaoReceita"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <!-- ═══ CHARTS VENDAS ═══ -->
+    <section class="report-grid" data-sector-section="vendas" hidden>
+      <article class="report-card report-card-wide">
+        <div class="report-card-header">
+          <div>
+            <h2>Previsão de recebimentos por mês</h2>
+            <p>Vendas com pagamento pendente agrupadas por mês da venda.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="graficoPrevisaoRecebimentos"></canvas>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Produtos mais vendidos</h2>
+            <p>Distribuição por volume de vendas no período.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoProdutosMaisVendidos"></canvas>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr><th>Produto</th><th>Qtd.</th><th>Valor total</th></tr>
+            </thead>
+            <tbody id="tabelaProdutosMaisVendidos">
+              <tr><td colspan="3" class="report-empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-card-half">
+        <div class="report-card-header">
+          <div>
+            <h2>Clientes que mais compram</h2>
+            <p>Ranking de clientes por volume de compras.</p>
+          </div>
+        </div>
+        <div class="chart-wrapper chart-wrapper-sm">
+          <canvas id="graficoClientesTop"></canvas>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr><th>Cliente</th><th>Compras</th><th>Valor total</th></tr>
+            </thead>
+            <tbody id="tabelaClientesTop">
+              <tr><td colspan="3" class="report-empty">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

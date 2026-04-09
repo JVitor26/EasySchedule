@@ -158,6 +158,25 @@
         </main>
     </div>
 
+    <nav class="app-mobile-nav" aria-label="Navegacao mobile">
+        {% if user.is_authenticated %}
+            <a class="app-mobile-link {% if '/dashboard/' in request.path %}is-active{% endif %}" href="{% url 'dashboard_home' %}">Agenda</a>
+            {% if not usuario_e_profissional %}
+                <a class="app-mobile-link {% if '/agendamentos/' in request.path and '/agendamentos/planos/' not in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">{{ business_profile.appointment_term_plural|default:"Agenda" }}</a>
+                <a class="app-mobile-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
+                <a class="app-mobile-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
+                <a class="app-mobile-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
+                <a class="app-mobile-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Portal</a>
+            {% else %}
+                <a class="app-mobile-link {% if '/agendamentos/' in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">Minha agenda</a>
+            {% endif %}
+        {% else %}
+            <a class="app-mobile-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Cliente</a>
+            <a class="app-mobile-link {% if '/empresas/cadastro/' in request.path %}is-active{% endif %}" href="{% url 'cadastro_empresa' %}">Empresa</a>
+            <a class="app-mobile-link {% if '/login/' in request.path %}is-active{% endif %}" href="{% url 'login' %}">Entrar</a>
+        {% endif %}
+    </nav>
+
     <script src="{% static 'js/theme.js' %}"></script>
     <script src="{% static 'js/pwa-register.js' %}"></script>
 </body>
