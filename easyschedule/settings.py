@@ -33,6 +33,7 @@ def _host_to_csrf_origins(host):
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key')
 
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+APP_LOG_LEVEL = os.environ.get("APP_LOG_LEVEL", "INFO").upper()
 
 ALLOWED_HOSTS = _env_list(
     "ALLOWED_HOSTS",
@@ -81,6 +82,7 @@ INSTALLED_APPS = [
 # 🧠 Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.RequestContextMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # ✅ ESSENCIAL
 
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -189,6 +191,7 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', 'whsec_not_configured
 STRIPE_API_VERSION = '2026-03-25.dahlia'
 STRIPE_DOMAIN_URL = os.getenv('STRIPE_DOMAIN_URL', 'http://localhost:8000')
 STRIPE_DEFAULT_CURRENCY = os.getenv('STRIPE_DEFAULT_CURRENCY', 'brl')
+SLOT_HOLD_MINUTES = int(os.getenv('SLOT_HOLD_MINUTES', '10'))
 
 
 # 🔐 Segurança extra (produção)
@@ -197,3 +200,45 @@ SECURE_SSL_REDIRECT = IS_RENDER
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_context': {
+            '()': 'core.logging_filters.RequestContextFilter',
+        },
+    },
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] [request_id=%(request_id)s] %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['request_context'],
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': APP_LOG_LEVEL,
+    },
+}
+
+
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0"))
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        send_default_pii=False,
+    )

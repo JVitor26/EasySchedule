@@ -77,3 +77,29 @@ class PasswordRecoveryCode(models.Model):
 	def disponivel(self):
 		return self.usado_em is None and not self.expirado
 
+
+class StripeWebhookEvent(models.Model):
+	PROCESSING_STATUS_CHOICES = [
+		("processed", "Processed"),
+		("ignored", "Ignored"),
+		("failed", "Failed"),
+	]
+
+	event_id = models.CharField(max_length=255, unique=True, db_index=True)
+	event_type = models.CharField(max_length=120)
+	livemode = models.BooleanField(default=False)
+	processing_status = models.CharField(
+		max_length=20,
+		choices=PROCESSING_STATUS_CHOICES,
+		default="processed",
+	)
+	payload = models.JSONField(default=dict, blank=True)
+	error_message = models.TextField(blank=True)
+	criado_em = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["-criado_em"]
+
+	def __str__(self):
+		return f"{self.event_type} ({self.event_id})"
+

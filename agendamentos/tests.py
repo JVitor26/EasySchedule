@@ -10,7 +10,7 @@ from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
 
-from .models import PlanoMensal
+from .models import AgendaLock, Agendamento, PlanoMensal
 
 
 class PlanoMensalFlowTests(TestCase):
@@ -77,7 +77,31 @@ class PlanoMensalFlowTests(TestCase):
 
         plano = PlanoMensal.objects.get(empresa=self.empresa, cliente=self.cliente)
         self.assertEqual(plano.pagamento_status, "pago")
+        self.assertEqual(plano.metodo_pagamento, "pix")
         self.assertGreater(plano.quantidade_encontros, 0)
         self.assertEqual(plano.agendamentos.count(), plano.quantidade_encontros)
         self.assertEqual(plano.agendamentos.filter(status="confirmado").count(), plano.quantidade_encontros)
-        self.assertEqual(plano.agendamentos.filter(forma_pagamento="pix").count(), plano.quantidade_encontros)
+        self.assertEqual(plano.agendamentos.filter(metodo_pagamento="pix").count(), plano.quantidade_encontros)
+        self.assertEqual(plano.agendamentos.filter(pagamento_status="pago").count(), plano.quantidade_encontros)
+
+    def test_salvar_agendamento_cria_lock_de_agenda(self):
+        data_agendamento = timezone.localdate() + timedelta(days=5)
+
+        agendamento = Agendamento.objects.create(
+            empresa=self.empresa,
+            cliente=self.cliente,
+            servico=self.servico,
+            profissional=self.profissional,
+            data=data_agendamento,
+            hora="10:00",
+            status="pendente",
+        )
+
+        self.assertIsNotNone(agendamento.pk)
+        self.assertTrue(
+            AgendaLock.objects.filter(
+                empresa=self.empresa,
+                profissional=self.profissional,
+                data=data_agendamento,
+            ).exists()
+        )

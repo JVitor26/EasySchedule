@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const elements = {
         slotsUrl: page.dataset.slotsUrl,
+        slotHoldUrl: page.dataset.slotHoldUrl,
         servico: document.getElementById("id_servico"),
         profissional: document.getElementById("id_profissional"),
         data: document.getElementById("id_data"),
@@ -31,9 +32,14 @@ document.addEventListener("DOMContentLoaded", () => {
         diaSemana: document.getElementById("id_dia_semana"),
         hora: document.getElementById("id_hora"),
         feedback: document.getElementById("slotsFeedback"),
+        holdFeedback: document.getElementById("slotHoldFeedback"),
+        slotHoldToken: document.getElementById("id_slot_hold_token"),
+        bookingForm: document.getElementById("bookingForm"),
         bookingTypeInputs,
         bookingFields: Array.from(document.querySelectorAll("[data-booking-field]")),
     };
+
+    let holdTimer = null;
 
     function getBookingType() {
         const selected = elements.bookingTypeInputs.find((input) => input.checked);
@@ -45,6 +51,108 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.feedback.classList.remove("is-loading", "is-success", "is-error");
         if (state) {
             elements.feedback.classList.add(state);
+        }
+    }
+
+    function setHoldFeedback(message, state = "") {
+        if (!elements.holdFeedback) {
+            return;
+        }
+        elements.holdFeedback.textContent = message;
+        elements.holdFeedback.classList.remove("is-loading", "is-success", "is-error");
+        if (state) {
+            elements.holdFeedback.classList.add(state);
+        }
+    }
+
+    function clearHoldState(resetToken = true) {
+        if (holdTimer) {
+            window.clearInterval(holdTimer);
+            holdTimer = null;
+        }
+        if (resetToken && elements.slotHoldToken) {
+            elements.slotHoldToken.value = "";
+        }
+        setHoldFeedback("");
+    }
+
+    function startHoldCountdown(expiresAtIso) {
+        if (!expiresAtIso) {
+            clearHoldState(false);
+            return;
+        }
+
+        const expiresAt = new Date(expiresAtIso);
+        if (Number.isNaN(expiresAt.getTime())) {
+            clearHoldState(false);
+            return;
+        }
+
+        if (holdTimer) {
+            window.clearInterval(holdTimer);
+        }
+
+        const tick = () => {
+            const remainingMs = expiresAt.getTime() - Date.now();
+            if (remainingMs <= 0) {
+                clearHoldState();
+                setHoldFeedback("A reserva temporaria expirou. Selecione o horario novamente.", "is-error");
+                return;
+            }
+
+            const totalSeconds = Math.floor(remainingMs / 1000);
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+            const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+            setHoldFeedback(`Horario reservado por ${minutes}:${seconds}. Finalize a reserva antes de expirar.`, "is-success");
+        };
+
+        tick();
+        holdTimer = window.setInterval(tick, 1000);
+    }
+
+    async function reserveSelectedSlotHold() {
+        if (getBookingType() !== "avulso") {
+            clearHoldState();
+            return;
+        }
+
+        if (!elements.slotHoldUrl || !elements.servico.value || !elements.profissional.value || !elements.data.value || !elements.hora.value) {
+            clearHoldState();
+            return;
+        }
+
+        setHoldFeedback("Reservando horario temporariamente...", "is-loading");
+
+        try {
+            const response = await fetch(elements.slotHoldUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({
+                    servico: elements.servico.value,
+                    profissional: elements.profissional.value,
+                    data: elements.data.value,
+                    hora: elements.hora.value,
+                    hold_token: elements.slotHoldToken?.value || "",
+                }),
+            });
+
+            const payload = await response.json();
+            if (!response.ok || payload.status !== "sucesso") {
+                throw new Error(payload.message || "Nao foi possivel reservar o horario temporariamente.");
+            }
+
+            if (elements.slotHoldToken) {
+                elements.slotHoldToken.value = payload.hold_token || "";
+            }
+
+            startHoldCountdown(payload.expires_at);
+        } catch (error) {
+            clearHoldState();
+            setHoldFeedback(error.message, "is-error");
+            refreshSlots();
         }
     }
 
@@ -73,6 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (bookingType === "pacote_mensal") {
+            clearHoldState();
             setFeedback("Selecione servico, profissional, mes e dia da semana para ver os horarios fixos do pacote.");
             setOptions([], "Selecione um horario fixo");
         } else {
@@ -149,6 +258,9 @@ document.addEventListener("DOMContentLoaded", () => {
         url.searchParams.set("servico", servico);
         url.searchParams.set("profissional", profissional);
         url.searchParams.set("data", data);
+            if (elements.slotHoldToken?.value) {
+                url.searchParams.set("hold_token", elements.slotHoldToken.value);
+            }
 
         try {
             const response = await fetch(url.toString(), {
@@ -187,12 +299,33 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.diaSemana,
     ].forEach((field) => {
         if (field) {
-            field.addEventListener("change", refreshSlots);
+            field.addEventListener("change", () => {
+                clearHoldState();
+                refreshSlots();
+            });
+        }
+    });
+
+    elements.hora?.addEventListener("change", () => {
+        reserveSelectedSlotHold();
+    });
+
+    elements.bookingForm?.addEventListener("submit", (event) => {
+        if (getBookingType() !== "avulso") {
+            return;
+        }
+        if (!elements.hora.value) {
+            return;
+        }
+        if (!elements.slotHoldToken?.value) {
+            event.preventDefault();
+            setHoldFeedback("Selecione novamente o horario para criar a reserva temporaria.", "is-error");
         }
     });
 
     elements.bookingTypeInputs.forEach((input) => {
         input.addEventListener("change", () => {
+            clearHoldState();
             syncBookingMode();
             refreshSlots();
         });

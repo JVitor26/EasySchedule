@@ -12,3 +12,4 @@ tzdata==2025.3
 whitenoise==6.12.0
 stripe>=13.0.0,<16.0.0
 python-dotenv>=1.0.0
+sentry-sdk[django]>=2.8.0

@@ -5,8 +5,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from agendamentos.availability import list_available_slots
-from agendamentos.models import Agendamento, PlanoMensal
+from agendamentos.availability import acquire_schedule_lock, coerce_hold_token, list_available_slots
+from agendamentos.models import Agendamento, PlanoMensal, SlotHold
 from agendamentos.plans import (
     WEEKDAY_CHOICES,
     list_monthly_available_slots,
@@ -111,10 +111,12 @@ class PublicBookingForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
+    slot_hold_token = forms.CharField(required=False, widget=forms.HiddenInput())
 
-    def __init__(self, *args, empresa=None, **kwargs):
+    def __init__(self, *args, empresa=None, session_key=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.empresa = empresa
+        self.session_key = session_key
         profile = get_business_profile(getattr(empresa, "tipo", None))
 
         self.fields["nome"].label = profile["client_name_label"]
@@ -203,6 +205,7 @@ class PublicBookingForm(forms.Form):
         selected_month = self._get_selected_month_reference()
         selected_weekday = self._get_selected_weekday()
         selected_hour = self._get_bound_value("hora")
+        selected_hold_token = self._get_bound_value("slot_hold_token")
         booking_type = self._get_booking_type()
 
         choices = [("", "Preencha os dados para consultar os horarios")]
@@ -227,6 +230,7 @@ class PublicBookingForm(forms.Form):
                     profissional=selected_professional,
                     servico=selected_service,
                     data=selected_date,
+                    exclude_hold_token=selected_hold_token,
                 )
                 choices = [("", "Selecione um horario")]
                 choices.extend((slot.strftime("%H:%M"), slot.strftime("%H:%M")) for slot in slots)
@@ -355,6 +359,7 @@ class PublicBookingForm(forms.Form):
             profissional=profissional,
             servico=servico,
             data=data,
+            exclude_hold_token=cleaned_data.get("slot_hold_token"),
         )
         selected_slot = next(
             (slot for slot in available_slots if slot.strftime("%H:%M") == hora),
@@ -444,6 +449,38 @@ class PublicBookingForm(forms.Form):
             observacoes=self.cleaned_data.get("observacoes", ""),
             status="pendente",
         )
+
+        hold_token = coerce_hold_token((self.cleaned_data.get("slot_hold_token") or "").strip())
+        hold = None
+
+        acquire_schedule_lock(
+            empresa=self.empresa,
+            profissional=self.cleaned_data["profissional"],
+            data=self.cleaned_data["data"],
+        )
+
+        if hold_token:
+            hold_queryset = SlotHold.objects.select_for_update().filter(
+                token=hold_token,
+                empresa=self.empresa,
+                profissional=self.cleaned_data["profissional"],
+                servico=self.cleaned_data["servico"],
+                data=self.cleaned_data["data"],
+                hora=self.cleaned_data["hora_obj"],
+                status="active",
+                reservado_ate__gt=timezone.now(),
+            )
+            if self.session_key:
+                hold_queryset = hold_queryset.filter(session_key=self.session_key)
+
+            hold = hold_queryset.first()
+
+            if hold is None:
+                self.add_error("hora", "A reserva temporaria desse horario expirou. Selecione novamente.")
+                raise ValidationError({"hora": ["A reserva temporaria desse horario expirou."]})
+
+            agendamento._hold_token = str(hold_token)
+
         try:
             agendamento.full_clean()
             agendamento.save()
@@ -453,6 +490,10 @@ class PublicBookingForm(forms.Form):
                 for message in messages:
                     self.add_error(form_field, message)
             raise
+
+        if hold is not None:
+            hold.status = "consumed"
+            hold.save(update_fields=["status", "atualizado_em"])
 
         notify_booking_created(agendamento)
 

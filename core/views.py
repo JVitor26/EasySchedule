@@ -6,15 +6,18 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render, redirect
 from django.http import JsonResponse, HttpResponse
+from django.db import connection, transaction
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+import logging
 import json
 import re
 from datetime import timedelta
 import secrets
+import stripe
 
-from agendamentos.availability import list_available_slots
-from agendamentos.models import PlanoMensal, Agendamento
+from agendamentos.availability import acquire_schedule_lock, coerce_hold_token, find_schedule_conflict, list_available_slots
+from agendamentos.models import PlanoMensal, Agendamento, SlotHold
 from agendamentos.plans import list_monthly_available_slots
 from empresas.business_profiles import get_business_profile
 from empresas.models import Empresa
@@ -25,7 +28,7 @@ from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from produtos.models import Produto
 from servicos.models import Servico
-from .models import ClientePortalOTP, ClientePortalPreferencia, PasswordRecoveryCode
+from .models import ClientePortalOTP, ClientePortalPreferencia, PasswordRecoveryCode, StripeWebhookEvent
 from .notifications import send_whatsapp_message, send_email_message
 
 from .forms import (
@@ -33,6 +36,9 @@ from .forms import (
     PasswordRecoveryRequestForm,
     PublicBookingForm,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -235,6 +241,9 @@ def empresa_detail(request, empresa_id):
     if access_denied:
         return access_denied
 
+    if not request.session.session_key:
+        request.session.create()
+
     profile = get_business_profile(empresa.tipo)
     success_booking = None
     success_client = None
@@ -242,7 +251,7 @@ def empresa_detail(request, empresa_id):
     success_plan = None
 
     if request.method == "POST":
-        form = PublicBookingForm(request.POST, empresa=empresa)
+        form = PublicBookingForm(request.POST, empresa=empresa, session_key=request.session.session_key)
         if form.is_valid():
             try:
                 result = form.save()
@@ -259,9 +268,9 @@ def empresa_detail(request, empresa_id):
                     "telefone": success_client.telefone,
                     "documento": success_client.documento,
                     "data_nascimento": success_client.data_nascimento,
-                })
+                }, session_key=request.session.session_key)
     else:
-        form = PublicBookingForm(empresa=empresa)
+        form = PublicBookingForm(empresa=empresa, session_key=request.session.session_key)
 
     # Produtos em destaque (top 3)
     top_produtos = (
@@ -420,6 +429,7 @@ def available_slots_api(request, empresa_id):
 
     servico_id = request.GET.get("servico")
     profissional_id = request.GET.get("profissional")
+    hold_token = request.GET.get("hold_token")
     booking_type = request.GET.get("tipo_reserva") or "avulso"
 
     servico = Servico.objects.filter(empresa=empresa, ativo=True, pk=servico_id).first() if servico_id else None
@@ -478,6 +488,7 @@ def available_slots_api(request, empresa_id):
         profissional=profissional,
         servico=servico,
         data=selected_date,
+        exclude_hold_token=hold_token,
     )
 
     payload = {
@@ -485,6 +496,112 @@ def available_slots_api(request, empresa_id):
         "message": "Horarios disponiveis carregados." if slots else "Nenhum horario livre para essa combinacao.",
     }
     return JsonResponse(payload)
+
+
+@require_http_methods(["POST"])
+def slot_hold_api(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    servico_id = payload.get("servico")
+    profissional_id = payload.get("profissional")
+    data_raw = payload.get("data")
+    hora_raw = payload.get("hora")
+    hold_token = coerce_hold_token((payload.get("hold_token") or "").strip())
+
+    if not all([servico_id, profissional_id, data_raw, hora_raw]):
+        return JsonResponse({"status": "erro", "message": "Preencha servico, profissional, data e horario."}, status=400)
+
+    servico = Servico.objects.filter(empresa=empresa, ativo=True, pk=servico_id).first()
+    profissional = Profissional.objects.filter(empresa=empresa, ativo=True, pk=profissional_id).first()
+    if not servico or not profissional:
+        return JsonResponse({"status": "erro", "message": "Servico ou profissional invalido."}, status=400)
+
+    try:
+        data = forms.DateField().clean(data_raw)
+        hora = forms.TimeField().clean(hora_raw)
+    except ValidationError:
+        return JsonResponse({"status": "erro", "message": "Data ou horario invalido."}, status=400)
+
+    if data < timezone.localdate():
+        return JsonResponse({"status": "erro", "message": "Nao e possivel reservar horario em data passada."}, status=400)
+
+    if not request.session.session_key:
+        request.session.create()
+    session_key = request.session.session_key or ""
+
+    hold_minutes = max(int(getattr(settings, "SLOT_HOLD_MINUTES", 10)), 1)
+    reservado_ate = timezone.now() + timedelta(minutes=hold_minutes)
+
+    with transaction.atomic():
+        acquire_schedule_lock(empresa=empresa, profissional=profissional, data=data)
+
+        SlotHold.objects.filter(status="active", reservado_ate__lte=timezone.now()).update(status="expired")
+
+        conflito = find_schedule_conflict(
+            empresa=empresa,
+            profissional=profissional,
+            servico=servico,
+            data=data,
+            hora=hora,
+            exclude_hold_token=hold_token,
+        )
+        if conflito:
+            if conflito.__class__.__name__ == "SlotHold":
+                message = "Esse horario foi reservado temporariamente por outro cliente."
+            else:
+                message = "Esse horario acabou de ser ocupado."
+            return JsonResponse({"status": "erro", "message": message}, status=409)
+
+        hold = None
+        if hold_token:
+            hold = SlotHold.objects.select_for_update().filter(
+                token=hold_token,
+                empresa=empresa,
+                session_key=session_key,
+            ).first()
+
+        if hold is None:
+            hold = SlotHold(
+                empresa=empresa,
+                profissional=profissional,
+                servico=servico,
+                data=data,
+                hora=hora,
+                reservado_ate=reservado_ate,
+                status="active",
+                session_key=session_key,
+            )
+        else:
+            hold.profissional = profissional
+            hold.servico = servico
+            hold.data = data
+            hold.hora = hora
+            hold.reservado_ate = reservado_ate
+            hold.status = "active"
+
+        hold.save()
+
+        SlotHold.objects.filter(
+            empresa=empresa,
+            session_key=session_key,
+            status="active",
+        ).exclude(pk=hold.pk).update(status="released")
+
+    return JsonResponse({
+        "status": "sucesso",
+        "hold_token": str(hold.token),
+        "expires_at": hold.reservado_ate.isoformat(),
+        "ttl_seconds": hold_minutes * 60,
+        "message": f"Horario reservado por {hold_minutes} minutos.",
+    })
 
 
 @require_http_methods(["POST"])
@@ -831,6 +948,91 @@ def cliente_minha_conta(request, empresa_id):
         "total_agendamentos": historico.count(),
         "cliente_has_portal_password": cliente.has_portal_password,
     })
+
+
+def healthz(request):
+    return JsonResponse({
+        "status": "ok",
+        "service": "easyschedule",
+        "request_id": getattr(request, "request_id", "-"),
+    })
+
+
+def readyz(request):
+    checks = {"database": "ok"}
+    status = "ok"
+    status_code = 200
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        checks["database"] = "error"
+        status = "degraded"
+        status_code = 503
+
+    return JsonResponse({
+        "status": status,
+        "checks": checks,
+        "request_id": getattr(request, "request_id", "-"),
+    }, status=status_code)
+
+
+@require_http_methods(["POST"])
+def stripe_webhook(request):
+    webhook_secret = getattr(settings, "STRIPE_WEBHOOK_SECRET", "")
+    if not webhook_secret or webhook_secret == "whsec_not_configured":
+        return JsonResponse({"status": "erro", "message": "Webhook Stripe nao configurado."}, status=503)
+
+    payload = request.body
+    signature = request.META.get("HTTP_STRIPE_SIGNATURE", "")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=payload,
+            sig_header=signature,
+            secret=webhook_secret,
+        )
+    except ValueError:
+        return JsonResponse({"status": "erro", "message": "Payload invalido."}, status=400)
+    except stripe.error.SignatureVerificationError:
+        return JsonResponse({"status": "erro", "message": "Assinatura invalida."}, status=400)
+
+    event_payload = event.to_dict_recursive() if hasattr(event, "to_dict_recursive") else dict(event)
+    event_id = event_payload.get("id")
+    event_type = event_payload.get("type", "unknown")
+
+    if not event_id:
+        return JsonResponse({"status": "erro", "message": "Evento sem id."}, status=400)
+
+    with transaction.atomic():
+        webhook_event, created = StripeWebhookEvent.objects.get_or_create(
+            event_id=event_id,
+            defaults={
+                "event_type": event_type,
+                "livemode": bool(event_payload.get("livemode", False)),
+                "processing_status": "processed",
+                "payload": event_payload,
+            },
+        )
+
+    if not created:
+        return JsonResponse({"status": "ok", "result": "duplicate", "event_id": event_id})
+
+    supported_event_types = {
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
+    }
+
+    if event_type not in supported_event_types:
+        webhook_event.processing_status = "ignored"
+        webhook_event.save(update_fields=["processing_status"])
+        return JsonResponse({"status": "ok", "result": "ignored", "event_id": event_id})
+
+    logger.info("Stripe webhook processado: %s", event_type)
+    return JsonResponse({"status": "ok", "result": "processed", "event_id": event_id})
 
 def service_worker_js(_request):
         content = """

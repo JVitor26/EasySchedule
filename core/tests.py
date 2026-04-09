@@ -1,14 +1,16 @@
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+import stripe
 
-from agendamentos.models import Agendamento, Pagamento, PlanoMensal
+from agendamentos.models import Agendamento, PlanoMensal, SlotHold
 from empresas.models import Empresa
-from core.models import PasswordRecoveryCode
+from core.models import PasswordRecoveryCode, StripeWebhookEvent
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
@@ -162,7 +164,89 @@ class PublicCustomerBookingTests(TestCase):
             data=self.data_agendamento,
             hora="10:00",
         )
-        self.assertTrue(Pagamento.objects.filter(agendamento=agendamento, status="pendente").exists())
+        self.assertEqual(agendamento.pagamento_status, "pendente")
+        self.assertEqual(agendamento.metodo_pagamento, "")
+
+    def test_api_hold_reserva_horario_temporariamente(self):
+        response = self.client.post(
+            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            data=json.dumps({
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "sucesso")
+        self.assertTrue(SlotHold.objects.filter(token=payload["hold_token"], status="active").exists())
+
+    def test_hold_bloqueia_horario_para_outra_sessao(self):
+        hold_response = self.client.post(
+            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            data=json.dumps({
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(hold_response.status_code, 200)
+
+        other_client = Client()
+        slots_response = other_client.get(
+            reverse("cliente_horarios", args=[self.empresa.pk]),
+            {
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+            },
+        )
+        self.assertEqual(slots_response.status_code, 200)
+
+        values = [item["value"] for item in slots_response.json()["slots"]]
+        self.assertNotIn("10:00", values)
+
+    def test_cliente_publico_consome_hold_ao_agendar(self):
+        hold_response = self.client.post(
+            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            data=json.dumps({
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(hold_response.status_code, 200)
+        hold_token = hold_response.json()["hold_token"]
+
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.pk]),
+            {
+                "nome": "Cliente Hold",
+                "email": "hold@example.com",
+                "telefone": "(65) 99999-9998",
+                "documento": "12312312399",
+                "data_nascimento": "1990-10-10",
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+                "slot_hold_token": hold_token,
+                "observacoes": "Reserva com hold.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Horario solicitado com sucesso")
+
+        hold = SlotHold.objects.get(token=hold_token)
+        self.assertEqual(hold.status, "consumed")
 
     def test_cliente_publico_recebe_erro_quando_horario_esta_ocupado(self):
         response = self.client.post(
@@ -217,7 +301,7 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(cliente.documento, "")
         self.assertIsNone(cliente.data_nascimento)
 
-    def test_cliente_publico_consegue_pagar_pelo_checkout(self):
+    def test_cliente_publico_cria_agendamento_com_pagamento_pendente(self):
         response = self.client.post(
             reverse("cliente_empresa", args=[self.empresa.pk]),
             {
@@ -241,25 +325,11 @@ class PublicCustomerBookingTests(TestCase):
             data=self.data_agendamento,
             hora="10:00",
         )
-        pagamento = Pagamento.objects.get(agendamento=agendamento)
-
-        payment_response = self.client.post(
-            reverse("cliente_pagamento", args=[pagamento.referencia_publica]),
-            {
-                "metodo": "pix",
-                "nome_pagador": "Ana Cliente",
-                "ultimos_digitos": "",
-                "aceitar_termos": "on",
-            },
-        )
-
-        self.assertEqual(payment_response.status_code, 200)
-        pagamento.refresh_from_db()
         agendamento.refresh_from_db()
 
-        self.assertEqual(pagamento.status, "pago")
-        self.assertEqual(agendamento.status, "confirmado")
-        self.assertEqual(agendamento.forma_pagamento, "pix")
+        self.assertEqual(agendamento.status, "pendente")
+        self.assertEqual(agendamento.pagamento_status, "pendente")
+        self.assertEqual(agendamento.metodo_pagamento, "")
 
     def test_api_publica_retorna_horarios_fixos_para_pacote_mensal(self):
         response = self.client.get(
@@ -280,7 +350,7 @@ class PublicCustomerBookingTests(TestCase):
         self.assertIn("10:00", values)
         self.assertIn("14:00", values)
 
-    def test_cliente_publico_consegue_criar_e_pagar_pacote_mensal(self):
+    def test_cliente_publico_consegue_criar_pacote_mensal(self):
         month_reference = self._next_month_reference()
 
         response = self.client.post(
@@ -312,23 +382,7 @@ class PublicCustomerBookingTests(TestCase):
         self.assertGreater(plano.quantidade_encontros, 0)
         self.assertEqual(plano.agendamentos.count(), plano.quantidade_encontros)
         self.assertTrue(plano.agendamentos.filter(status="pendente").exists())
-
-        payment_response = self.client.post(
-            reverse("cliente_plano_pagamento", args=[plano.referencia_publica]),
-            {
-                "metodo": "pix",
-                "nome_pagador": "Cliente Pacote",
-                "ultimos_digitos": "",
-                "aceitar_termos": "on",
-            },
-        )
-
-        self.assertEqual(payment_response.status_code, 200)
-        plano.refresh_from_db()
-
-        self.assertEqual(plano.pagamento_status, "pago")
-        self.assertEqual(plano.agendamentos.filter(status="confirmado").count(), plano.quantidade_encontros)
-        self.assertEqual(plano.agendamentos.filter(forma_pagamento="pix").count(), plano.quantidade_encontros)
+        self.assertEqual(plano.pagamento_status, "pendente")
 
 
 class PasswordRecoveryTests(TestCase):
@@ -470,148 +524,93 @@ class PasswordRecoveryTests(TestCase):
         self.assertIsNotNone(recovery.usado_em)
 
 
-class StripeIntegrationTests(TestCase):
-	"""Test Stripe payment integration"""
-	
-	def setUp(self):
-		self.owner = User.objects.create_user(
-			username="empresa-stripe@example.com",
-			email="empresa-stripe@example.com",
-			password="senha-forte-123",
-		)
-		self.empresa = Empresa.objects.create(
-			usuario=self.owner,
-			nome="Studio Yoga",
-			tipo="aula",
-			cnpj="12345678000101",
-		)
-		self.profissional = Profissional.objects.create(
-			empresa=self.empresa,
-			nome="Mestre Yoga",
-			especialidade="Yoga",
-			telefone="65999999998",
-			email="mestre@example.com",
-			ativo=True,
-		)
-		self.servico = Servico.objects.create(
-			empresa=self.empresa,
-			nome="Aula de Yoga",
-			categoria="aula",
-			descricao="Aula de yoga hatha",
-			preco=100.00,
-			tempo=60,
-			ativo=True,
-		)
-		self.cliente = Pessoa.objects.create(
-			empresa=self.empresa,
-			nome="Cliente Yoga",
-			telefone="65999991111",
-			email="cliente@example.com",
-		)
-		self.data_agendamento = timezone.localdate() + timedelta(days=5)
-	
-	def test_stripe_transaction_model_created(self):
-		"""Test that StripeTransaction model exists and can be created"""
-		from core.models import StripeTransaction
-		
-		tx = StripeTransaction.objects.create(
-			stripe_session_id="cs_test_123456789",
-			empresa=self.empresa,
-			object_type="agendamento",
-			object_id=1,
-			amount_total=100.00,
-			customer_email="test@example.com",
-		)
-		
-		self.assertTrue(tx.is_pending)
-		self.assertFalse(tx.is_successful)
-		self.assertFalse(tx.is_failed)
-		self.assertEqual(tx.status, "pending")
-	
-	def test_pagamento_has_stripe_fields(self):
-		"""Test that Pagamento model has Stripe fields"""
-		agendamento = Agendamento.objects.create(
-			empresa=self.empresa,
-			cliente=self.cliente,
-			servico=self.servico,
-			profissional=self.profissional,
-			data=self.data_agendamento,
-			hora=timezone.localtime().time(),
-		)
-		
-		pagamento = Pagamento.objects.create(
-			empresa=self.empresa,
-			agendamento=agendamento,
-			cliente=self.cliente,
-			valor=100.00,
-		)
-		
-		# Check Stripe fields exist
-		self.assertIsNone(pagamento.stripe_session_id)
-		self.assertIsNone(pagamento.stripe_payment_intent_id)
-		self.assertIsNone(pagamento.stripe_customer_id)
-		self.assertIsNone(pagamento.stripe_synced_at)
-		
-		# Set Stripe fields
-		pagamento.stripe_session_id = "cs_test_123"
-		pagamento.save()
-		
-		pagamento_reloaded = Pagamento.objects.get(pk=pagamento.pk)
-		self.assertEqual(pagamento_reloaded.stripe_session_id, "cs_test_123")
-	
-	def test_plano_mensal_has_stripe_fields(self):
-		"""Test that PlanoMensal model has Stripe fields"""
-		from datetime import date
-		mes_ref = date(2026, 4, 1)
-		
-		plano = PlanoMensal.objects.create(
-			empresa=self.empresa,
-			cliente=self.cliente,
-			servico=self.servico,
-			profissional=self.profissional,
-			mes_referencia=mes_ref,
-			dia_semana=0,  # Monday
-			hora=timezone.localtime().time(),
-			valor_mensal=400.00,
-			quantidade_encontros=4,
-		)
-		
-		# Check Stripe fields exist
-		self.assertIsNone(plano.stripe_session_id)
-		self.assertIsNone(plano.stripe_payment_intent_id)
-		self.assertIsNone(plano.stripe_customer_id)
-		self.assertIsNone(plano.stripe_synced_at)
-		
-		# Set Stripe fields
-		plano.stripe_session_id = "cs_test_plano_123"
-		plano.save()
-		
-		plano_reloaded = PlanoMensal.objects.get(pk=plano.pk)
-		self.assertEqual(plano_reloaded.stripe_session_id, "cs_test_plano_123")
-	
-	def test_stripe_checkout_endpoint_exists(self):
-		"""Test that Stripe checkout API endpoints exist"""
-		agendamento = Agendamento.objects.create(
-			empresa=self.empresa,
-			cliente=self.cliente,
-			servico=self.servico,
-			profissional=self.profissional,
-			data=self.data_agendamento,
-			hora=timezone.localtime().time(),
-		)
-		pagamento = Pagamento.objects.create(
-			empresa=self.empresa,
-			agendamento=agendamento,
-			cliente=self.cliente,
-			valor=100.00,
-		)
-		
-		# Note: This will fail in test since Stripe SDK needs valid keys
-		# But we're testing that the endpoint is properly routed
-		url = reverse("stripe_checkout_agendamento_api", kwargs={"pagamento_id": pagamento.pk})
-		self.assertIn("/stripe/checkout/agendamento/", url)
-	
-	def test_stripe_webhook_endpoint_exists(self):
-		"""Test that Stripe webhook endpoint exists"""
-		url = reverse("stripe_webhook")
-		self.assertIn("/stripe/webhook/", url)
+@override_settings(STRIPE_WEBHOOK_SECRET="whsec_test_secret")
+class StripeWebhookTests(TestCase):
+    @patch("core.views.stripe.Webhook.construct_event")
+    def test_webhook_processa_evento_assinado(self, construct_event_mock):
+        construct_event_mock.return_value = {
+            "id": "evt_test_1",
+            "type": "checkout.session.completed",
+            "livemode": False,
+            "data": {"object": {"id": "cs_test_1"}},
+        }
+
+        response = self.client.post(
+            reverse("stripe_webhook"),
+            data="{}",
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE="t=123,v1=signature",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"], "processed")
+        self.assertEqual(StripeWebhookEvent.objects.count(), 1)
+
+        event = StripeWebhookEvent.objects.get(event_id="evt_test_1")
+        self.assertEqual(event.processing_status, "processed")
+        self.assertEqual(event.event_type, "checkout.session.completed")
+
+    @patch("core.views.stripe.Webhook.construct_event")
+    def test_webhook_ignora_evento_duplicado(self, construct_event_mock):
+        construct_event_mock.return_value = {
+            "id": "evt_test_duplicado",
+            "type": "checkout.session.completed",
+            "livemode": False,
+            "data": {"object": {"id": "cs_test_dup"}},
+        }
+
+        first_response = self.client.post(
+            reverse("stripe_webhook"),
+            data="{}",
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE="t=123,v1=signature",
+        )
+        second_response = self.client.post(
+            reverse("stripe_webhook"),
+            data="{}",
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE="t=123,v1=signature",
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_response.json()["result"], "duplicate")
+        self.assertEqual(StripeWebhookEvent.objects.filter(event_id="evt_test_duplicado").count(), 1)
+
+    @patch("core.views.stripe.Webhook.construct_event")
+    def test_webhook_rejeita_assinatura_invalida(self, construct_event_mock):
+        construct_event_mock.side_effect = stripe.error.SignatureVerificationError("bad", "signature")
+
+        response = self.client.post(
+            reverse("stripe_webhook"),
+            data="{}",
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE="assinatura-invalida",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["status"], "erro")
+        self.assertEqual(StripeWebhookEvent.objects.count(), 0)
+
+
+class InfrastructureEndpointsTests(TestCase):
+    def test_healthz_endpoint_retorna_ok(self):
+        response = self.client.get(reverse("healthz"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["service"], "easyschedule")
+
+    def test_readyz_endpoint_retorna_db_ok(self):
+        response = self.client.get(reverse("readyz"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["checks"]["database"], "ok")
+
+    def test_request_id_e_refletido_no_header(self):
+        request_id = "req-teste-123"
+        response = self.client.get(reverse("healthz"), HTTP_X_REQUEST_ID=request_id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Request-ID"], request_id)

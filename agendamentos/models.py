@@ -1,5 +1,7 @@
+import uuid
+
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from empresas.models import Empresa
@@ -8,6 +10,53 @@ from profissionais.models import Profissional
 from servicos.models import Servico
 
 from .plans import WEEKDAY_CHOICES, normalize_month_reference, sync_monthly_plan_schedule
+
+
+class AgendaLock(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE)
+    data = models.DateField()
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("empresa", "profissional", "data")
+
+    def __str__(self):
+        return f"Lock {self.profissional.nome} {self.data.strftime('%d/%m/%Y')}"
+
+
+class SlotHold(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Ativo"),
+        ("consumed", "Consumido"),
+        ("released", "Liberado"),
+        ("expired", "Expirado"),
+    ]
+
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    profissional = models.ForeignKey(Profissional, on_delete=models.CASCADE)
+    servico = models.ForeignKey(Servico, on_delete=models.CASCADE)
+    data = models.DateField()
+    hora = models.TimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active", db_index=True)
+    reservado_ate = models.DateTimeField()
+    session_key = models.CharField(max_length=120, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["empresa", "profissional", "data", "status"]),
+        ]
+        ordering = ["-criado_em"]
+
+    @property
+    def ativo(self):
+        return self.status == "active" and self.reservado_ate > timezone.now()
+
+    def __str__(self):
+        return f"Hold {self.token} - {self.data} {self.hora}"
 
 
 class Agendamento(models.Model):
@@ -95,6 +144,8 @@ class Agendamento(models.Model):
         if self.data and self.hora and self.profissional_id and self.servico_id and self.empresa_id:
             from .availability import find_schedule_conflict
 
+            hold_token = getattr(self, "_hold_token", None)
+
             conflito = find_schedule_conflict(
                 empresa=self.empresa,
                 profissional=self.profissional,
@@ -102,20 +153,47 @@ class Agendamento(models.Model):
                 data=self.data,
                 hora=self.hora,
                 exclude_agendamento_id=self.pk,
+                exclude_hold_token=hold_token,
             )
 
             if conflito:
-                errors["hora"] = (
-                    f"Já existe um agendamento para {self.profissional.nome} em "
-                    f'{self.data.strftime("%d/%m/%Y")} às {conflito.hora.strftime("%H:%M")}.'
-                )
+                if conflito.__class__.__name__ == "SlotHold":
+                    errors["hora"] = (
+                        f"Esse horario esta temporariamente reservado em "
+                        f'{self.data.strftime("%d/%m/%Y")} às {conflito.hora.strftime("%H:%M")}. '
+                    )
+                else:
+                    errors["hora"] = (
+                        f"Já existe um agendamento para {self.profissional.nome} em "
+                        f'{self.data.strftime("%d/%m/%Y")} às {conflito.hora.strftime("%H:%M")}. '
+                    )
 
         if errors:
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
+        with transaction.atomic():
+            lock_targets = set()
+
+            if self.pk:
+                original = self.__class__.objects.filter(pk=self.pk).values(
+                    "empresa_id",
+                    "profissional_id",
+                    "data",
+                ).first()
+                if original and all(original.values()):
+                    lock_targets.add((original["empresa_id"], original["profissional_id"], original["data"]))
+
+            if self.empresa_id and self.profissional_id and self.data:
+                lock_targets.add((self.empresa_id, self.profissional_id, self.data))
+
+            from .availability import acquire_schedule_lock_by_ids
+
+            for empresa_id, profissional_id, data in sorted(lock_targets, key=lambda value: (value[0], value[1], value[2])):
+                acquire_schedule_lock_by_ids(empresa_id=empresa_id, profissional_id=profissional_id, data=data)
+
+            self.clean()
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.cliente} - {self.servico} em {self.data} {self.hora}"
@@ -211,7 +289,11 @@ class PlanoMensal(models.Model):
         self.save()
         self.sync_schedule()
 
-        self.agendamentos.update(status="confirmado")
+        self.agendamentos.update(
+            status="confirmado",
+            pagamento_status="pago",
+            metodo_pagamento=self.metodo_pagamento or "",
+        )
 
     @property
     def first_occurrence(self):

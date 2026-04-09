@@ -1,5 +1,7 @@
 from datetime import datetime, time, timedelta
+import uuid
 
+from django.db import IntegrityError
 from django.utils import timezone
 
 AGENDA_START_TIME = time(8, 0)
@@ -37,6 +39,17 @@ def coerce_time_value(value):
     return None
 
 
+def coerce_hold_token(value):
+    if not value:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def list_available_slots(
     empresa,
     profissional,
@@ -44,8 +57,9 @@ def list_available_slots(
     data,
     exclude_agendamento_id=None,
     exclude_agendamento_ids=None,
+    exclude_hold_token=None,
 ):
-    from .models import Agendamento
+    from .models import Agendamento, SlotHold
 
     if not empresa or not profissional or not servico or not data:
         return []
@@ -85,6 +99,23 @@ def list_available_slots(
         end = start + timedelta(minutes=get_service_duration_minutes(agendamento.servico))
         occupied_ranges.append((start, end))
 
+    hold_queryset = SlotHold.objects.filter(
+        empresa=empresa,
+        profissional=profissional,
+        data=data,
+        status="active",
+        reservado_ate__gt=timezone.now(),
+    ).select_related("servico")
+
+    hold_token = coerce_hold_token(exclude_hold_token)
+    if hold_token:
+        hold_queryset = hold_queryset.exclude(token=hold_token)
+
+    for hold in hold_queryset:
+        start = datetime.combine(data, hold.hora)
+        end = start + timedelta(minutes=get_service_duration_minutes(hold.servico))
+        occupied_ranges.append((start, end))
+
     current = first_slot
     available_slots = []
 
@@ -111,8 +142,9 @@ def find_schedule_conflict(
     hora,
     exclude_agendamento_id=None,
     exclude_agendamento_ids=None,
+    exclude_hold_token=None,
 ):
-    from .models import Agendamento
+    from .models import Agendamento, SlotHold
 
     if not empresa or not profissional or not servico or not data or not hora:
         return None
@@ -144,4 +176,55 @@ def find_schedule_conflict(
         if candidate_start < end and candidate_end > start:
             return agendamento
 
+    hold_queryset = SlotHold.objects.filter(
+        empresa=empresa,
+        profissional=profissional,
+        data=data,
+        status="active",
+        reservado_ate__gt=timezone.now(),
+    ).select_related("servico")
+
+    hold_token = coerce_hold_token(exclude_hold_token)
+    if hold_token:
+        hold_queryset = hold_queryset.exclude(token=hold_token)
+
+    for hold in hold_queryset:
+        start = datetime.combine(data, hold.hora)
+        end = start + timedelta(minutes=get_service_duration_minutes(hold.servico))
+        if candidate_start < end and candidate_end > start:
+            return hold
+
     return None
+
+
+def acquire_schedule_lock(empresa, profissional, data):
+    if not empresa or not profissional or not data:
+        return None
+
+    return acquire_schedule_lock_by_ids(
+        empresa_id=empresa.id,
+        profissional_id=profissional.id,
+        data=data,
+    )
+
+
+def acquire_schedule_lock_by_ids(empresa_id, profissional_id, data):
+    from .models import AgendaLock
+
+    if not empresa_id or not profissional_id or not data:
+        return None
+
+    try:
+        lock, _created = AgendaLock.objects.get_or_create(
+            empresa_id=empresa_id,
+            profissional_id=profissional_id,
+            data=data,
+        )
+    except IntegrityError:
+        lock = AgendaLock.objects.get(
+            empresa_id=empresa_id,
+            profissional_id=profissional_id,
+            data=data,
+        )
+
+    return AgendaLock.objects.select_for_update().get(pk=lock.pk)

@@ -8,6 +8,7 @@
 <section
   class="client-company-page"
   data-slots-url="{% url 'cliente_horarios' empresa.id %}"
+  data-slot-hold-url="{% url 'cliente_slot_hold_api' empresa.id %}"
 >
   <div class="client-company-shell">
     <header class="client-company-hero">
@@ -177,6 +178,7 @@
 
       <form id="bookingForm" method="post" class="client-booking-form" novalidate>
         {% csrf_token %}
+        {{ form.slot_hold_token }}
         {% if form.non_field_errors %}
         <div class="client-form-errors">{{ form.non_field_errors }}</div>
         {% endif %}
@@ -266,6 +268,7 @@
         </div>
 
         <p id="slotsFeedback" class="slots-feedback">Selecione servico, profissional e o formato desejado para ver os horarios livres.</p>
+        <p id="slotHoldFeedback" class="slots-feedback"></p>
 
         <div class="client-form-actions">
           <button type="submit" class="btn-success">Solicitar reserva</button>
