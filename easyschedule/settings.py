@@ -169,7 +169,36 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # 📁 Uploads
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+
+
+def _resolve_media_root():
+    explicit_media_root = os.environ.get("MEDIA_ROOT", "").strip()
+    if explicit_media_root:
+        return Path(explicit_media_root)
+
+    render_media_root = os.environ.get("RENDER_MEDIA_ROOT", "").strip()
+    if render_media_root:
+        return Path(render_media_root)
+
+    render_disk_path = os.environ.get("RENDER_DISK_PATH", "").strip()
+    if render_disk_path:
+        return Path(render_disk_path) / "media"
+
+    if IS_RENDER:
+        # Default path commonly used with Render persistent disks.
+        return Path("/var/data/media")
+
+    return BASE_DIR / "media"
+
+
+MEDIA_ROOT = _resolve_media_root()
+
+try:
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+except OSError:
+    # If the directory cannot be created at startup, Django will raise a clearer
+    # storage error at write time with the target path details.
+    pass
 
 
 # 🔑 Login / Logout
