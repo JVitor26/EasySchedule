@@ -171,34 +171,47 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
 
 
+def _ensure_writable_dir(path_obj):
+    try:
+        path_obj.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+
+    if os.access(path_obj, os.W_OK):
+        return path_obj
+    return None
+
+
 def _resolve_media_root():
+    fallback_local = BASE_DIR / "media"
+
     explicit_media_root = os.environ.get("MEDIA_ROOT", "").strip()
     if explicit_media_root:
-        return Path(explicit_media_root)
+        writable = _ensure_writable_dir(Path(explicit_media_root))
+        if writable:
+            return writable
 
     render_media_root = os.environ.get("RENDER_MEDIA_ROOT", "").strip()
     if render_media_root:
-        return Path(render_media_root)
+        writable = _ensure_writable_dir(Path(render_media_root))
+        if writable:
+            return writable
 
     render_disk_path = os.environ.get("RENDER_DISK_PATH", "").strip()
     if render_disk_path:
-        return Path(render_disk_path) / "media"
+        writable = _ensure_writable_dir(Path(render_disk_path) / "media")
+        if writable:
+            return writable
 
-    if IS_RENDER:
-        # Default path commonly used with Render persistent disks.
+    # Only use Render's default persistent path when it is actually writable.
+    if IS_RENDER and _ensure_writable_dir(Path("/var/data/media")):
         return Path("/var/data/media")
 
-    return BASE_DIR / "media"
+    # Safe fallback prevents 500 on upload when persistent disk is not mounted.
+    return _ensure_writable_dir(fallback_local) or fallback_local
 
 
 MEDIA_ROOT = _resolve_media_root()
-
-try:
-    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-except OSError:
-    # If the directory cannot be created at startup, Django will raise a clearer
-    # storage error at write time with the target path details.
-    pass
 
 
 # 🔑 Login / Logout
