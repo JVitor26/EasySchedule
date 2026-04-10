@@ -27,13 +27,24 @@ class Command(BaseCommand):
             ))
             return
 
-        existing = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=username)).order_by("id").first()
+        self.stdout.write(
+            f"Bootstrap de superusuário: username='{username}', email='{email}', reset_password={reset_password}"
+        )
+
+        existing = (
+            User.objects.filter(email__iexact=email).order_by("id").first()
+            or User.objects.filter(username__iexact=username).order_by("id").first()
+        )
         if existing:
             changed_fields = []
 
             if existing.email != email:
                 existing.email = email
                 changed_fields.append("email")
+
+            if not existing.is_active:
+                existing.is_active = True
+                changed_fields.append("is_active")
 
             if not existing.is_staff:
                 existing.is_staff = True
@@ -74,6 +85,9 @@ class Command(BaseCommand):
             if conflicted.email != email:
                 conflicted.email = email
                 changed_fields.append("email")
+            if not conflicted.is_active:
+                conflicted.is_active = True
+                changed_fields.append("is_active")
             if not conflicted.is_staff:
                 conflicted.is_staff = True
                 changed_fields.append("is_staff")
