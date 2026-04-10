@@ -212,11 +212,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const bookingType = getBookingType();
 
         elements.bookingFields.forEach((field) => {
-            const shouldShow = field.dataset.bookingField === bookingType;
+            const modes = (field.dataset.bookingField || "")
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean);
+            const shouldShow = !modes.length || modes.includes(bookingType);
             field.classList.toggle("is-hidden", !shouldShow);
         });
 
-        if (bookingType === "pacote_mensal") {
+        if (bookingType === "somente_produtos") {
+            clearHoldState();
+            setFeedback("Confirme os dados pessoais, a data de retirada/entrega e finalize somente os produtos do carrinho.");
+            setOptions([], "Nao se aplica para compra somente de produtos");
+        } else if (bookingType === "pacote_mensal") {
             clearHoldState();
             setFeedback("Selecione servico, profissional, mes e dia da semana para ver os horarios fixos do pacote.");
             setOptions([], "Selecione um horario fixo");
@@ -230,6 +238,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const bookingType = getBookingType();
         const servico = elements.servico.value;
         const profissional = elements.profissional.value;
+
+        if (bookingType === "somente_produtos") {
+            clearHoldState();
+            setOptions([], "Nao se aplica para compra somente de produtos");
+            setFeedback("Os horarios nao sao obrigatorios para confirmar somente produtos.");
+            return;
+        }
 
         if (bookingType === "pacote_mensal") {
             const mesReferencia = elements.mesReferencia.value;

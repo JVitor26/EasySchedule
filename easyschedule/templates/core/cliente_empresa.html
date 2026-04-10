@@ -29,11 +29,24 @@
       </div>
     </header>
 
-    {% if success_booking %}
+    {% if success_booking or success_product_sales %}
     <section class="client-success-card">
-      <h2>{% if success_plan %}Pacote mensal solicitado com sucesso{% else %}Horario solicitado com sucesso{% endif %}</h2>
+      <h2>
+        {% if success_product_sales and not success_booking %}
+        Pedido de produtos confirmado com sucesso
+        {% elif success_plan %}
+        Pacote mensal solicitado com sucesso
+        {% else %}
+        Horario solicitado com sucesso
+        {% endif %}
+      </h2>
       <p>
-        {% if success_plan %}
+        {% if success_product_sales and not success_booking %}
+        {{ success_client.nome }} teve {{ success_product_sales|length }} produto{{ success_product_sales|length|pluralize }} registrado{{ success_product_sales|length|pluralize }} como venda pendente.
+        {% if success_delivery_date %}
+        Retirada/entrega prevista para {{ success_delivery_date|date:"d/m/Y" }}.
+        {% endif %}
+        {% elif success_plan %}
         {{ success_client.nome }} agora esta cadastrado(a) na empresa e seu pacote mensal foi montado com
         {{ success_plan.quantidade_encontros }} encontro{{ success_plan.quantidade_encontros|pluralize }} em
         {{ success_plan.get_dia_semana_display|lower }} as {{ success_plan.hora|time:"H:i" }} no mes
@@ -51,6 +64,10 @@
       {% elif success_plan %}
       <div class="client-success-actions">
         <span class="payment-inline-note">Valor do mes: R$ {{ success_plan.valor_mensal|floatformat:2 }}</span>
+      </div>
+      {% elif success_product_sales %}
+      <div class="client-success-actions">
+        <span class="payment-inline-note">Total dos produtos: R$ {{ success_products_total|floatformat:2 }}</span>
       </div>
       {% endif %}
     </section>
@@ -173,7 +190,7 @@
       <div class="client-panel-header">
         <div>
           <h2>Cadastre-se e escolha o formato</h2>
-          <p>Monte um agendamento avulso ou um pacote mensal com dia fixo e finalize o pagamento pelo aplicativo.</p>
+          <p>Monte um agendamento avulso, um pacote mensal ou confirme somente produtos com retirada/entrega.</p>
         </div>
       </div>
 
@@ -220,10 +237,12 @@
                 <span class="booking-type-copy">
                   <strong>{{ radio.choice_label }}</strong>
                   <small>
-                    {% if forloop.first %}
+                    {% if forloop.counter == 1 %}
                     Reserve apenas um dia e depois siga para o checkout.
-                    {% else %}
+                    {% elif forloop.counter == 2 %}
                     Escolha um dia fixo da semana e um horario para repetir durante o mes.
+                    {% else %}
+                    Confirme apenas os produtos do carrinho para registrar a venda pendente e a entrega.
                     {% endif %}
                   </small>
                 </span>
@@ -232,12 +251,12 @@
             </div>
             {{ form.tipo_reserva.errors }}
           </div>
-          <div class="client-form-group">
+          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
             <label>{{ form.servico.label }}</label>
             {{ form.servico }}
             {{ form.servico.errors }}
           </div>
-          <div class="client-form-group">
+          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
             <label>{{ form.profissional.label }}</label>
             {{ form.profissional }}
             {{ form.profissional.errors }}
@@ -257,7 +276,7 @@
             {{ form.dia_semana }}
             {{ form.dia_semana.errors }}
           </div>
-          <div class="client-form-group">
+          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
             <label>{{ form.hora.label }}</label>
             {{ form.hora }}
             {{ form.hora.errors }}

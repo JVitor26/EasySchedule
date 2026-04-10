@@ -89,6 +89,7 @@ class VendaForm(forms.ModelForm):
         self.fields["valor_venda"].label = "Valor de venda (R$)"
         self.fields["valor_venda"].widget.attrs["placeholder"] = "0,00"
         self.fields["data_venda"].label = "Data da venda"
+        self.fields["data_entrega"].label = "Data prevista de retirada/entrega"
         self.fields["data_pagamento"].label = "Data do pagamento (vazio = ainda não pago)"
         self.fields["observacoes"].label = "Observações"
         self.fields["observacoes"].widget.attrs["placeholder"] = "Anotações internas."
@@ -107,11 +108,13 @@ class VendaForm(forms.ModelForm):
             "cliente_nome_avulso",
             "valor_venda",
             "data_venda",
+            "data_entrega",
             "data_pagamento",
             "observacoes",
         ]
         widgets = {
             "data_venda": forms.DateInput(attrs={"type": "date"}),
+            "data_entrega": forms.DateInput(attrs={"type": "date"}),
             "data_pagamento": forms.DateInput(attrs={"type": "date"}),
             "observacoes": forms.Textarea(attrs={"rows": 3}),
         }

@@ -3,11 +3,12 @@ from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from .models import Agendamento, PlanoMensal
 from .forms import AgendamentoForm, PlanoMensalForm
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import json
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
@@ -17,6 +18,7 @@ from empresas.permissions import (
     user_can_access_module,
 )
 from core.notifications import notify_booking_created
+from produtos.models import VendaProduto
 
 
 @login_required
@@ -198,34 +200,29 @@ def agendamentos_api(request):
         return JsonResponse([], safe=False)
     profissional_id = request.GET.get('profissional')
     status = request.GET.get('status')
+    tipo_evento = (request.GET.get('tipo_evento') or 'geral').strip().lower()
     start = request.GET.get('start')
     end = request.GET.get('end')
 
-    eventos = []
-    queryset = Agendamento.objects.filter(empresa=empresa).select_related(
-        'cliente', 'servico', 'profissional'
-    ).order_by('data', 'hora')
+    include_agendamentos = tipo_evento in ('', 'geral', 'agendamentos')
+    include_produtos = tipo_evento in ('', 'geral', 'produtos')
 
-    if is_profissional_user(request.user):
-        queryset = queryset.filter(profissional=request.user.profissional_profile)
+    if tipo_evento not in ('', 'geral', 'agendamentos', 'produtos'):
+        include_agendamentos = True
+        include_produtos = True
 
-    if profissional_id:
-        queryset = queryset.filter(profissional_id=profissional_id)
-
-    if status:
-        queryset = queryset.filter(status=status)
+    start_date = None
+    end_date = None
 
     if start:
         start_value = parse_datetime(start)
         start_date = start_value.date() if start_value else parse_date(start[:10])
-        if start_date:
-            queryset = queryset.filter(data__gte=start_date)
 
     if end:
         end_value = parse_datetime(end)
         end_date = end_value.date() if end_value else parse_date(end[:10])
-        if end_date:
-            queryset = queryset.filter(data__lt=end_date)
+
+    eventos = []
 
     status_colors = {
         'pendente': '#f59e0b',
@@ -234,26 +231,119 @@ def agendamentos_api(request):
         'cancelado': '#ef4444',
     }
 
-    for ag in queryset:
-        inicio = datetime.combine(ag.data, ag.hora)
-        termino = inicio + timedelta(minutes=ag.servico.tempo or 30)
-        eventos.append({
-            'id': ag.id,
-            'title': f'{ag.cliente.nome} - {ag.servico.nome}',
-            'start': inicio.isoformat(),
-            'end': termino.isoformat(),
-            'color': status_colors.get(ag.status, ag.servico.cor or '#22c55e'),
-            'extendedProps': {
-                'cliente': ag.cliente.nome,
-                'servico': ag.servico.nome,
-                'profissional': ag.profissional.nome if ag.profissional else '',
-                'valor': str(ag.servico.preco),
-                'status': ag.status,
-                'status_label': ag.get_status_display(),
-                'telefone': ag.cliente.telefone,
-                'observacoes': ag.observacoes or '',
-            }
-        })
+    if include_agendamentos:
+        queryset = Agendamento.objects.filter(empresa=empresa).select_related(
+            'cliente', 'servico', 'profissional'
+        ).order_by('data', 'hora')
+
+        if is_profissional_user(request.user):
+            queryset = queryset.filter(profissional=request.user.profissional_profile)
+
+        if profissional_id:
+            queryset = queryset.filter(profissional_id=profissional_id)
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if start_date:
+            queryset = queryset.filter(data__gte=start_date)
+
+        if end_date:
+            queryset = queryset.filter(data__lt=end_date)
+
+        for ag in queryset:
+            inicio = datetime.combine(ag.data, ag.hora)
+            termino = inicio + timedelta(minutes=ag.servico.tempo or 30)
+            eventos.append({
+                'id': ag.id,
+                'title': f'{ag.cliente.nome} - {ag.servico.nome}',
+                'start': inicio.isoformat(),
+                'end': termino.isoformat(),
+                'editable': True,
+                'color': status_colors.get(ag.status, ag.servico.cor or '#22c55e'),
+                'extendedProps': {
+                    'tipo_evento': 'agendamento',
+                    'is_product_event': False,
+                    'cliente': ag.cliente.nome,
+                    'servico': ag.servico.nome,
+                    'profissional': ag.profissional.nome if ag.profissional else '',
+                    'valor': str(ag.servico.preco),
+                    'status': ag.status,
+                    'status_label': ag.get_status_display(),
+                    'telefone': ag.cliente.telefone,
+                    'observacoes': ag.observacoes or '',
+                }
+            })
+
+    if include_produtos:
+        vendas_qs = VendaProduto.objects.filter(empresa=empresa).select_related(
+            'produto',
+            'cliente',
+            'agendamento__profissional',
+        )
+
+        if is_profissional_user(request.user):
+            vendas_qs = vendas_qs.filter(
+                Q(agendamento__profissional=request.user.profissional_profile)
+                | Q(agendamento__isnull=True)
+            )
+
+        if profissional_id:
+            vendas_qs = vendas_qs.filter(
+                Q(agendamento__profissional_id=profissional_id)
+                | Q(agendamento__isnull=True)
+            )
+
+        if start_date:
+            vendas_qs = vendas_qs.filter(
+                Q(data_entrega__isnull=False, data_entrega__gte=start_date)
+                | Q(data_entrega__isnull=True, data_venda__gte=start_date)
+            )
+
+        if end_date:
+            vendas_qs = vendas_qs.filter(
+                Q(data_entrega__isnull=False, data_entrega__lt=end_date)
+                | Q(data_entrega__isnull=True, data_venda__lt=end_date)
+            )
+
+        if status == 'pendente':
+            vendas_qs = vendas_qs.filter(data_pagamento__isnull=True)
+        elif status in ('confirmado', 'finalizado'):
+            vendas_qs = vendas_qs.filter(data_pagamento__isnull=False)
+        elif status == 'cancelado':
+            vendas_qs = vendas_qs.none()
+
+        for venda in vendas_qs.order_by('data_entrega', 'data_venda', 'criado_em'):
+            data_evento = venda.data_entrega or venda.data_venda
+            inicio = datetime.combine(data_evento, time(hour=9, minute=0))
+            termino = inicio + timedelta(minutes=30)
+            pendente = venda.data_pagamento is None
+            status_raw = 'pendente' if pendente else 'pago'
+            status_label = 'Pendente (produto)' if pendente else 'Pago (produto)'
+            profissional_nome = ''
+            if venda.agendamento_id and venda.agendamento and venda.agendamento.profissional:
+                profissional_nome = venda.agendamento.profissional.nome
+
+            eventos.append({
+                'id': f'produto-{venda.id}',
+                'title': f'Produto: {venda.produto.nome} - {venda.nome_cliente}',
+                'start': inicio.isoformat(),
+                'end': termino.isoformat(),
+                'editable': False,
+                'color': '#f59e0b' if pendente else '#0ea5e9',
+                'extendedProps': {
+                    'tipo_evento': 'produto',
+                    'is_product_event': True,
+                    'cliente': venda.nome_cliente,
+                    'servico': f'Retirada/entrega de {venda.produto.nome}',
+                    'profissional': profissional_nome,
+                    'valor': str(venda.valor_venda),
+                    'status': status_raw,
+                    'status_label': status_label,
+                    'telefone': venda.cliente.telefone if venda.cliente_id else '',
+                    'observacoes': venda.observacoes or 'Sem observacoes.',
+                }
+            })
 
     return JsonResponse(eventos, safe=False)
 

@@ -14,7 +14,7 @@ from empresas.models import Empresa
 from core.models import PasswordRecoveryCode, StripeWebhookEvent
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
-from produtos.models import Produto
+from produtos.models import Produto, VendaProduto
 from servicos.models import Servico
 
 
@@ -613,6 +613,81 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(payload["total_itens"], 2)
         self.assertEqual(len(payload["itens"]), 1)
         self.assertEqual(payload["itens"][0]["produto_id"], self.produto.pk)
+
+    def test_agendamento_com_produtos_cria_vendas_pendentes(self):
+        data_retirada = timezone.localdate() + timedelta(days=6)
+
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
+            {
+                "nome": "Cliente Produtos",
+                "email": "produtos@example.com",
+                "telefone": "(65) 99999-1112",
+                "documento": "99999999999",
+                "data_nascimento": "1992-06-01",
+                "tipo_reserva": "avulso",
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+                "data_retirada_produtos": data_retirada.isoformat(),
+                "produtos_json": json.dumps([
+                    {"produto_id": self.produto.pk, "quantidade": 2},
+                ]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        agendamento = Agendamento.objects.get(
+            empresa=self.empresa,
+            cliente__email="produtos@example.com",
+            data=self.data_agendamento,
+            hora="10:00",
+        )
+
+        vendas = VendaProduto.objects.filter(empresa=self.empresa, cliente__email="produtos@example.com")
+        self.assertEqual(vendas.count(), 1)
+
+        venda = vendas.first()
+        self.assertIsNone(venda.data_pagamento)
+        self.assertEqual(venda.data_entrega, data_retirada)
+        self.assertEqual(venda.agendamento_id, agendamento.id)
+        self.assertIn("Quantidade: 2", venda.observacoes)
+
+    def test_cliente_publico_consegue_confirmar_somente_produtos(self):
+        data_retirada = timezone.localdate() + timedelta(days=4)
+
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
+            {
+                "nome": "Cliente So Produtos",
+                "email": "so-produtos@example.com",
+                "telefone": "(65) 99999-1113",
+                "documento": "12312312399",
+                "tipo_reserva": "somente_produtos",
+                "data_retirada_produtos": data_retirada.isoformat(),
+                "produtos_json": json.dumps([
+                    {"produto_id": self.produto.pk, "quantidade": 1},
+                ]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pedido de produtos confirmado com sucesso")
+
+        self.assertFalse(
+            Agendamento.objects.filter(
+                empresa=self.empresa,
+                cliente__email="so-produtos@example.com",
+            ).exists()
+        )
+
+        vendas = VendaProduto.objects.filter(empresa=self.empresa, cliente__email="so-produtos@example.com")
+        self.assertEqual(vendas.count(), 1)
+        venda = vendas.first()
+        self.assertIsNone(venda.data_pagamento)
+        self.assertEqual(venda.data_entrega, data_retirada)
+        self.assertIsNone(venda.agendamento)
 
     def test_catalogo_da_empresa_exibe_servicos_e_profissionais(self):
         response = self.client.get(reverse("cliente_catalogo", args=[self.empresa.portal_token]))

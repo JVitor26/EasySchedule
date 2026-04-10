@@ -48,6 +48,18 @@ class VendaProduto(models.Model):
     valor_venda = models.DecimalField(max_digits=10, decimal_places=2, help_text="Valor cobrado na venda")
     data_venda = models.DateField(help_text="Data em que a venda foi realizada")
     data_pagamento = models.DateField(null=True, blank=True, help_text="Data em que o pagamento foi recebido")
+    data_entrega = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Data prevista para retirada/entrega do produto",
+    )
+    agendamento = models.ForeignKey(
+        "agendamentos.Agendamento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="vendas_produtos",
+    )
     observacoes = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

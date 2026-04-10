@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const elements = {
+        filtroTipo: document.getElementById("agendaFiltroTipo"),
         filtroProfissional: document.getElementById("agendaFiltroProfissional"),
         filtroStatus: document.getElementById("agendaFiltroStatus"),
         limparFiltros: document.getElementById("agendaLimparFiltros"),
@@ -36,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
         modalTitle: document.getElementById("agendaModalTitle"),
         modalCliente: document.getElementById("modalCliente"),
         modalProfissional: document.getElementById("modalProfissional"),
+        modalItemLabel: document.getElementById("modalItemLabel"),
         modalServico: document.getElementById("modalServico"),
         modalValor: document.getElementById("modalValor"),
         modalStatus: document.getElementById("modalStatus"),
@@ -125,20 +127,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function fillModal(event) {
         const props = event.extendedProps || {};
+        const isProductEvent = props.tipo_evento === "produto" || props.is_product_event;
 
         elements.modalTitle.textContent = event.title;
         elements.modalCliente.textContent = props.cliente || "-";
         elements.modalProfissional.textContent = props.profissional || "-";
+        elements.modalItemLabel.textContent = isProductEvent ? "Produto" : "Servico";
         elements.modalServico.textContent = props.servico || "-";
         elements.modalValor.textContent = moneyFormatter.format(Number(props.valor) || 0);
         elements.modalStatus.textContent = props.status_label || "-";
         elements.modalTelefone.textContent = props.telefone || "-";
         elements.modalObservacoes.textContent = props.observacoes || "Sem observacoes informadas.";
-        elements.modalEditarLink.href = replaceTemplateId(editUrlTemplate, event.id);
+        if (isProductEvent) {
+            elements.modalEditarLink.style.display = "none";
+        } else {
+            elements.modalEditarLink.style.display = "";
+            elements.modalEditarLink.href = replaceTemplateId(editUrlTemplate, event.id);
+        }
 
         const allowed = STATUS_TRANSITIONS[props.status] || [];
         document.querySelectorAll(".agenda-status-btn").forEach((btn) => {
-            btn.style.display = allowed.includes(btn.dataset.status) ? "" : "none";
+            if (isProductEvent) {
+                btn.style.display = "none";
+            } else {
+                btn.style.display = allowed.includes(btn.dataset.status) ? "" : "none";
+            }
             btn.dataset.eventId = event.id;
         });
     }
@@ -183,6 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const url = buildUrl(eventsUrl, {
                 start: fetchInfo.startStr,
                 end: fetchInfo.endStr,
+                tipo_evento: elements.filtroTipo.value,
                 profissional: elements.filtroProfissional.value,
                 status: elements.filtroStatus.value,
             });
@@ -203,9 +217,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     successCallback(data);
 
                     if (data.length) {
-                        setFeedback(`${data.length} agendamentos exibidos no calendario.`);
+                        setFeedback(`${data.length} evento(s) exibido(s) no calendario.`);
                     } else {
-                        setFeedback("Nenhum agendamento encontrado para os filtros selecionados.");
+                        setFeedback("Nenhum evento encontrado para os filtros selecionados.");
                     }
                 })
                 .catch((error) => {
@@ -217,6 +231,13 @@ document.addEventListener("DOMContentLoaded", () => {
             openModal(info.event);
         },
         async eventDrop(info) {
+            const props = info.event.extendedProps || {};
+            if (props.tipo_evento === "produto" || props.is_product_event) {
+                info.revert();
+                setFeedback("Eventos de produto nao podem ser arrastados no calendario.", "is-error");
+                return;
+            }
+
             const moveUrl = replaceTemplateId(moveUrlTemplate, info.event.id);
 
             setFeedback("Atualizando horario do agendamento...", "is-loading");
@@ -259,13 +280,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    [elements.filtroProfissional, elements.filtroStatus].forEach((field) => {
+    [elements.filtroTipo, elements.filtroProfissional, elements.filtroStatus].forEach((field) => {
         field.addEventListener("change", () => {
             calendar.refetchEvents();
         });
     });
 
     elements.limparFiltros.addEventListener("click", () => {
+        elements.filtroTipo.value = "geral";
         elements.filtroProfissional.value = "";
         elements.filtroStatus.value = "";
         calendar.refetchEvents();

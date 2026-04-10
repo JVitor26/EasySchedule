@@ -146,11 +146,20 @@
       <div class="agenda-card-header">
         <div>
           <h2>Calendario operacional</h2>
-          <p>Filtre a visualizacao e arraste os eventos para reorganizar os horarios.</p>
+          <p>Filtre a visualizacao por tipo e arraste os agendamentos para reorganizar os horarios.</p>
         </div>
       </div>
 
       <div class="agenda-filter-grid">
+        <div class="agenda-filter-field">
+          <label for="agendaFiltroTipo">Tipo de evento</label>
+          <select id="agendaFiltroTipo">
+            <option value="geral">Geral (agendamentos + produtos)</option>
+            <option value="agendamentos">Somente agendamentos</option>
+            <option value="produtos">Somente produtos</option>
+          </select>
+        </div>
+
         <div class="agenda-filter-field">
           <label for="agendaFiltroProfissional">Profissional</label>
           <select id="agendaFiltroProfissional">
@@ -176,7 +185,7 @@
         </div>
 
         <p class="agenda-feedback" id="agendaFeedback" role="status">
-          Arraste um atendimento para reagendar direto no calendario.
+          Arraste um agendamento para reagendar direto no calendario.
         </p>
       </div>
 
@@ -185,6 +194,8 @@
         <span><i class="legend-dot dot-confirmado"></i>Confirmado</span>
         <span><i class="legend-dot dot-finalizado"></i>Finalizado</span>
         <span><i class="legend-dot dot-cancelado"></i>Cancelado</span>
+        <span><i class="legend-dot" style="background:#f59e0b;"></i>Produto pendente</span>
+        <span><i class="legend-dot" style="background:#0ea5e9;"></i>Produto pago</span>
       </div>
 
       <div id="calendar"></div>
@@ -197,7 +208,7 @@
   <div class="agenda-modal-box" role="dialog" aria-modal="true" aria-labelledby="agendaModalTitle">
     <div class="agenda-modal-header">
       <div>
-        <p class="agenda-modal-eyebrow">Detalhes do atendimento</p>
+        <p class="agenda-modal-eyebrow">Detalhes do evento</p>
         <h3 id="agendaModalTitle">Agendamento</h3>
       </div>
       <button type="button" class="agenda-modal-close" id="fecharModal" aria-label="Fechar">x</button>
@@ -213,7 +224,7 @@
         <strong id="modalProfissional">-</strong>
       </div>
       <div>
-        <span class="modal-label">Servico</span>
+        <span class="modal-label" id="modalItemLabel">Servico</span>
         <strong id="modalServico">-</strong>
       </div>
       <div>

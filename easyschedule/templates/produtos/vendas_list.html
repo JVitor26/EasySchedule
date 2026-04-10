@@ -62,7 +62,9 @@
             <th>Cliente</th>
             <th>Valor de venda</th>
             <th>Data da venda</th>
+            <th>Data de entrega</th>
             <th>Data do pagamento</th>
+            <th>Status</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -74,11 +76,27 @@
             <td><span class="table-mobile-label">Valor de venda</span>R$ {{ venda.valor_venda|floatformat:2 }}</td>
             <td><span class="table-mobile-label">Data da venda</span>{{ venda.data_venda|date:"d/m/Y" }}</td>
             <td>
+              <span class="table-mobile-label">Data de entrega</span>
+              {% if venda.data_entrega %}
+                {{ venda.data_entrega|date:"d/m/Y" }}
+              {% else %}
+                <span class="badge-soft">Não definida</span>
+              {% endif %}
+            </td>
+            <td>
               <span class="table-mobile-label">Data do pagamento</span>
               {% if venda.data_pagamento %}
                 {{ venda.data_pagamento|date:"d/m/Y" }}
               {% else %}
                 <span class="badge-soft">Não recebido</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="table-mobile-label">Status</span>
+              {% if venda.data_pagamento %}
+                <span class="badge-soft" style="background: rgba(34, 197, 94, 0.12); color: #166534;">Pago</span>
+              {% else %}
+                <span class="badge-soft" style="background: rgba(245, 158, 11, 0.16); color: #92400e;">Pendente</span>
               {% endif %}
             </td>
             <td>
@@ -91,7 +109,7 @@
           </tr>
           {% empty %}
           <tr class="empty-row">
-            <td colspan="6" class="table-empty-cell">Nenhuma venda registrada no período.</td>
+            <td colspan="8" class="table-empty-cell">Nenhuma venda registrada no período.</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -18,7 +18,7 @@ from agendamentos.plans import (
 from empresas.business_profiles import get_business_profile
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
-from produtos.models import Produto
+from produtos.models import Produto, VendaProduto
 from servicos.models import Servico
 from .notifications import notify_booking_created
 from empresas.models import Empresa
@@ -27,6 +27,7 @@ from empresas.models import Empresa
 BOOKING_TYPE_CHOICES = [
     ("avulso", "Somente um dia"),
     ("pacote_mensal", "Pacote mensal"),
+    ("somente_produtos", "Somente produtos"),
 ]
 
 
@@ -104,12 +105,12 @@ class PublicBookingForm(forms.Form):
         widget=forms.RadioSelect,
         required=False,
     )
-    servico = forms.ModelChoiceField(queryset=Servico.objects.none())
-    profissional = forms.ModelChoiceField(queryset=Profissional.objects.none())
+    servico = forms.ModelChoiceField(queryset=Servico.objects.none(), required=False)
+    profissional = forms.ModelChoiceField(queryset=Profissional.objects.none(), required=False)
     data = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
     mes_referencia = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
     dia_semana = forms.ChoiceField(required=False, choices=[("", "Selecione")] + list(WEEKDAY_CHOICES))
-    hora = forms.ChoiceField(choices=(), required=True)
+    hora = forms.ChoiceField(choices=(), required=False)
     observacoes = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
@@ -216,6 +217,11 @@ class PublicBookingForm(forms.Form):
 
         choices = [("", "Preencha os dados para consultar os horarios")]
 
+        if booking_type == "somente_produtos":
+            choices = [("", "Nao se aplica para compra somente de produtos")]
+            self.fields["hora"].choices = choices
+            return
+
         if booking_type == "pacote_mensal":
             if selected_service and selected_professional and selected_month and selected_weekday is not None:
                 slots, _occurrence_dates = list_monthly_available_slots(
@@ -296,6 +302,8 @@ class PublicBookingForm(forms.Form):
 
     def clean_hora(self):
         value = self.cleaned_data["hora"]
+        if self.cleaned_data.get("tipo_reserva") == "somente_produtos":
+            return value
         if not value:
             raise forms.ValidationError("Selecione um horario disponivel.")
         return value
@@ -404,6 +412,69 @@ class PublicBookingForm(forms.Form):
 
         agendamento.save(update_fields=["observacoes"])
 
+    def _build_product_sale_note(self, item, delivery_date, agendamento=None):
+        delivery_label = delivery_date.strftime("%d/%m/%Y")
+        note = (
+            "[Venda pendente criada no portal] "
+            f"Quantidade: {item['quantidade']}. "
+            f"Retirada/entrega: {delivery_label}."
+        )
+
+        if agendamento is not None:
+            note = (
+                f"{note} "
+                f"Relacionada ao agendamento de {agendamento.data.strftime('%d/%m/%Y')} "
+                f"as {agendamento.hora.strftime('%H:%M')}."
+            )
+
+        return note
+
+    def _register_product_sales(self, cliente, agendamento=None):
+        selected_products = self.cleaned_data.get("selected_products") or []
+        if not selected_products:
+            return []
+
+        delivery_date = (
+            self.cleaned_data.get("data_retirada_produtos")
+            or (agendamento.data if agendamento is not None else None)
+            or timezone.localdate()
+        )
+
+        produto_ids = [item["produto_id"] for item in selected_products]
+        produtos = {
+            produto.id: produto
+            for produto in Produto.objects.filter(empresa=self.empresa, pk__in=produto_ids)
+        }
+
+        vendas = []
+        for item in selected_products:
+            produto = produtos.get(item["produto_id"])
+            if produto is None:
+                continue
+
+            quantidade = int(item["quantidade"])
+            subtotal = item.get("subtotal")
+            if subtotal is None:
+                subtotal = produto.preco * quantidade
+
+            venda = VendaProduto.objects.create(
+                empresa=self.empresa,
+                produto=produto,
+                cliente=cliente,
+                valor_venda=subtotal,
+                data_venda=timezone.localdate(),
+                data_entrega=delivery_date,
+                agendamento=agendamento,
+                observacoes=self._build_product_sale_note(
+                    item=item,
+                    delivery_date=delivery_date,
+                    agendamento=agendamento,
+                ),
+            )
+            vendas.append(venda)
+
+        return vendas
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -418,8 +489,24 @@ class PublicBookingForm(forms.Form):
         if product_errors:
             self.add_error("produtos_json", " ".join(product_errors[:3]))
 
+        if booking_type in ("avulso", "pacote_mensal"):
+            if not servico:
+                self.add_error("servico", "Selecione um servico para continuar.")
+            if not profissional:
+                self.add_error("profissional", "Selecione um profissional para continuar.")
+
         if payload_items and not selected_products and not product_errors:
             self.add_error("produtos_json", "Selecione ao menos um produto valido no catalogo da empresa.")
+
+        if booking_type == "somente_produtos":
+            if not selected_products:
+                self.add_error("produtos_json", "Adicione ao menos um produto para confirmar o pedido.")
+            if not data_retirada_produtos:
+                self.add_error("data_retirada_produtos", "Informe a data para retirada/entrega dos produtos.")
+
+            cleaned_data["selected_products"] = selected_products
+            cleaned_data["selected_products_total"] = products_total
+            return cleaned_data
 
         if selected_products and not data_retirada_produtos:
             self.add_error("data_retirada_produtos", "Informe uma data para retirada dos produtos selecionados.")
@@ -533,6 +620,17 @@ class PublicBookingForm(forms.Form):
         cliente = self._get_or_create_cliente()
         booking_type = self.cleaned_data["tipo_reserva"]
 
+        if booking_type == "somente_produtos":
+            vendas = self._register_product_sales(cliente=cliente)
+            return {
+                "tipo_reserva": "somente_produtos",
+                "cliente": cliente,
+                "agendamento": None,
+                "plano": None,
+                "vendas_produtos": vendas,
+                "data_retirada_produtos": self.cleaned_data.get("data_retirada_produtos"),
+            }
+
         if booking_type == "pacote_mensal":
             plano = PlanoMensal(
                 empresa=self.empresa,
@@ -562,11 +660,15 @@ class PublicBookingForm(forms.Form):
                 self._append_products_note_to_appointment(first_occurrence)
                 notify_booking_created(first_occurrence)
 
+            vendas = self._register_product_sales(cliente=cliente, agendamento=first_occurrence)
+
             return {
                 "tipo_reserva": "pacote_mensal",
                 "cliente": cliente,
                 "agendamento": first_occurrence,
                 "plano": plano,
+                "vendas_produtos": vendas,
+                "data_retirada_produtos": self.cleaned_data.get("data_retirada_produtos"),
             }
 
         agendamento = Agendamento(
@@ -629,9 +731,13 @@ class PublicBookingForm(forms.Form):
 
         notify_booking_created(agendamento)
 
+        vendas = self._register_product_sales(cliente=cliente, agendamento=agendamento)
+
         return {
             "tipo_reserva": "avulso",
             "cliente": cliente,
             "agendamento": agendamento,
             "plano": None,
+            "vendas_produtos": vendas,
+            "data_retirada_produtos": self.cleaned_data.get("data_retirada_produtos"),
         }

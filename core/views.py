@@ -580,6 +580,9 @@ def empresa_detail(request, portal_token):
     success_client = None
     success_payment = None
     success_plan = None
+    success_product_sales = []
+    success_products_total = Decimal("0")
+    success_delivery_date = None
     booking_error_message = ""
 
     if request.method == "POST":
@@ -594,11 +597,19 @@ def empresa_detail(request, portal_token):
                 success_booking = result["agendamento"]
                 success_client = result["cliente"]
                 success_plan = result["plano"]
+                success_product_sales = result.get("vendas_produtos") or []
+                success_products_total = sum((venda.valor_venda for venda in success_product_sales), Decimal("0"))
+                success_delivery_date = result.get("data_retirada_produtos")
                 _set_portal_cliente(request, empresa.id, success_client.id)
                 _clear_cart_data(request, empresa.id)
                 request.session.modified = True
 
-                if success_plan:
+                if result.get("tipo_reserva") == "somente_produtos":
+                    messages.success(
+                        request,
+                        "Pedido de produtos confirmado com sucesso. As vendas foram registradas como pendentes na empresa.",
+                    )
+                elif success_plan:
                     messages.success(request, "Pacote mensal criado com sucesso. Seus agendamentos ja estao disponiveis em Meus agendamentos.")
                 else:
                     messages.success(request, "Reserva criada com sucesso. Confira os detalhes em Meus agendamentos.")
@@ -639,6 +650,9 @@ def empresa_detail(request, portal_token):
         "success_booking": success_booking,
         "success_client": success_client,
         "success_plan": success_plan,
+        "success_product_sales": success_product_sales,
+        "success_products_total": success_products_total,
+        "success_delivery_date": success_delivery_date,
         "booking_error_message": booking_error_message,
     }
     return render(request, "core/cliente_empresa.html", context)
