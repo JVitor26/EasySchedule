@@ -53,14 +53,14 @@
       </div>
 
       <h2 class="auth-title">Bem-vindo de volta</h2>
-      <p class="auth-subtitle">Use seu e-mail corporativo para entrar e continuar sua operacao.</p>
+      <p class="auth-subtitle">Use seu e-mail ou usuario para entrar e continuar sua operacao.</p>
 
       {% if form.non_field_errors %}
       <div class="auth-form-errors">{{ form.non_field_errors }}</div>
       {% endif %}
 
       <div class="auth-fields">
-        <label for="id_username">Email</label>
+        <label for="id_username">Email ou usuario</label>
         {{ form.username }}
         {{ form.username.errors }}
       </div>

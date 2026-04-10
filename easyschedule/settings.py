@@ -219,6 +219,11 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/accounts/login-redirect/'    
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
+AUTHENTICATION_BACKENDS = [
+    'core.auth_backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 
 # 🔢 PK padrão
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

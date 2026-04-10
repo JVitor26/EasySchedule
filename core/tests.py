@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test import Client, TestCase, override_settings
@@ -61,6 +62,25 @@ class HomepageRoutingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertRedirects(response, reverse("dashboard_home"), fetch_redirect_response=False)
         self.assertContains(response, "Agenda")
+
+
+class InternalAuthBackendTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="admin",
+            email="admin@easyschedule.com",
+            password="SenhaForte#123",
+        )
+
+    def test_authenticate_internal_user_with_username(self):
+        auth_user = authenticate(username="admin", password="SenhaForte#123")
+        self.assertIsNotNone(auth_user)
+        self.assertEqual(auth_user.pk, self.user.pk)
+
+    def test_authenticate_internal_user_with_email(self):
+        auth_user = authenticate(username="admin@easyschedule.com", password="SenhaForte#123")
+        self.assertIsNotNone(auth_user)
+        self.assertEqual(auth_user.pk, self.user.pk)
 
 
 class PublicCustomerBookingTests(TestCase):
