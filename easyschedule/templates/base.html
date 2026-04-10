@@ -34,15 +34,19 @@
         <div class="container">
             <div class="app-navbar">
                 <a class="app-brand" href="{% if user.is_authenticated %}{% url 'dashboard_home' %}{% else %}{% url 'cliente_home' %}{% endif %}">
-                    <span class="brand-mark">
-                        {% if user.is_authenticated and empresa_atual and empresa_atual.logo %}
-                        <img src="{{ empresa_atual.logo.url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo">
-                        {% elif user.is_authenticated and empresa_atual and empresa_atual.logo_url %}
-                        <img src="{{ empresa_atual.logo_url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo">
-                        {% else %}
-                        <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="brand-logo">
-                        {% endif %}
+                    {% if user.is_authenticated and empresa_atual and empresa_atual.logo %}
+                    <span class="brand-mark brand-mark-company">
+                        <img src="{{ empresa_atual.logo.url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo brand-logo-company">
                     </span>
+                    {% elif user.is_authenticated and empresa_atual and empresa_atual.logo_url %}
+                    <span class="brand-mark brand-mark-company">
+                        <img src="{{ empresa_atual.logo_url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo brand-logo-company">
+                    </span>
+                    {% else %}
+                    <span class="brand-mark">
+                        <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="brand-logo">
+                    </span>
+                    {% endif %}
                     <span class="brand-copy">
                         <strong>{% if user.is_authenticated and empresa_atual %}{{ empresa_atual.nome }}{% else %}EasySchedule{% endif %}</strong>
                         <small>{% if user.is_authenticated %}Sistema de agenda personalizado{% else %}Reserva online com elegancia{% endif %}</small>

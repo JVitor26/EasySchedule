@@ -23,12 +23,35 @@
       {% endif %}
       <div class="form-grid">
         <div class="form-group full">
-          <label>{{ form.usuario.label }}</label>
-          {{ form.usuario }}
-          {% if form.usuario.help_text %}
-          <small class="form-help">{{ form.usuario.help_text }}</small>
+          <label>{{ form.criar_acesso.label }}</label>
+          <div class="checkbox-group">
+            <label>{{ form.criar_acesso }} {{ form.criar_acesso.label }}</label>
+          </div>
+          {% if form.criar_acesso.help_text %}
+          <small class="form-help">{{ form.criar_acesso.help_text }}</small>
           {% endif %}
-          {{ form.usuario.errors }}
+          {{ form.criar_acesso.errors }}
+        </div>
+
+        <div class="form-group" id="acesso-email-group">
+          <label>{{ form.email_acesso.label }}</label>
+          {{ form.email_acesso }}
+          {% if form.email_acesso.help_text %}
+          <small class="form-help">{{ form.email_acesso.help_text }}</small>
+          {% endif %}
+          {{ form.email_acesso.errors }}
+        </div>
+
+        <div class="form-group" id="acesso-senha-group">
+          <label>{{ form.senha_acesso.label }}</label>
+          {{ form.senha_acesso }}
+          {{ form.senha_acesso.errors }}
+        </div>
+
+        <div class="form-group" id="acesso-senha-confirmacao-group">
+          <label>{{ form.senha_confirmacao_acesso.label }}</label>
+          {{ form.senha_confirmacao_acesso }}
+          {{ form.senha_confirmacao_acesso.errors }}
         </div>
 
         <div class="form-group">
@@ -86,5 +109,28 @@
     </form>
   </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var check = document.getElementById("id_criar_acesso");
+  var emailGroup = document.getElementById("acesso-email-group");
+  var senhaGroup = document.getElementById("acesso-senha-group");
+  var confirmacaoGroup = document.getElementById("acesso-senha-confirmacao-group");
+
+  if (!check || !emailGroup || !senhaGroup || !confirmacaoGroup) {
+    return;
+  }
+
+  function syncAccessFields() {
+    var show = check.checked || check.disabled;
+    emailGroup.style.display = show ? "" : "none";
+    senhaGroup.style.display = show ? "" : "none";
+    confirmacaoGroup.style.display = show ? "" : "none";
+  }
+
+  check.addEventListener("change", syncAccessFields);
+  syncAccessFields();
+});
+</script>
 
 {% endblock %}

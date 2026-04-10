@@ -55,9 +55,6 @@ def profissionais_form(request, pk=None):
             profissional = form.save(commit=False)
             profissional.empresa = empresa
 
-            if not empresa.permite_acesso_profissional:
-                profissional.usuario = None
-
             if profissional.pk is None and profissional.ativo and not empresa.can_add_profissional():
                 form.add_error(None, f"Limite do plano atingido ({empresa.limite_profissionais} profissional(is) ativos).")
                 return render(request, 'profissionais/profissionais_form.html', {
@@ -65,6 +62,11 @@ def profissionais_form(request, pk=None):
                     'page_title': f"Editar {termo_profissional}" if profissional else f"Novo {termo_profissional}",
                     'page_subtitle': f"Registre a equipe e a especialidade de cada {termo_profissional.lower()}.",
                 })
+
+            usuario_acesso = form.provision_access_user()
+            profissional.usuario = usuario_acesso
+            if usuario_acesso and not (profissional.email or '').strip():
+                profissional.email = usuario_acesso.email
 
             profissional.save()
             return redirect('profissionais_list')

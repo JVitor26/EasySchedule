@@ -190,6 +190,59 @@ class MultiEmpresaIsolationTests(TestCase):
         self.assertEqual(form_manicure.fields["nome"].label, "Nome da manicure")
         self.assertEqual(form_agendamento.fields["profissional"].label, "Barbeiro")
 
+    def test_profissional_form_cria_login_novo_usuario(self):
+        form = ProfissionalForm(
+            data={
+                "criar_acesso": "on",
+                "email_acesso": "novo.profissional@example.com",
+                "senha_acesso": "SenhaForte123!",
+                "senha_confirmacao_acesso": "SenhaForte123!",
+                "nome": "Novo Profissional",
+                "especialidade": "Corte",
+                "telefone": "65999997777",
+                "email": "",
+                "cpf": "",
+                "data_nascimento": "",
+                "endereco": "",
+                "ativo": "on",
+                "observacoes": "",
+            },
+            empresa=self.empresa_a,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        profissional = form.save(commit=False)
+        profissional.empresa = self.empresa_a
+        profissional.usuario = form.provision_access_user()
+        profissional.save()
+
+        self.assertIsNotNone(profissional.usuario)
+        self.assertEqual(profissional.usuario.username, "novo.profissional@example.com")
+        self.assertTrue(profissional.usuario.check_password("SenhaForte123!"))
+
+    def test_profissional_form_bloqueia_email_ja_existente(self):
+        form = ProfissionalForm(
+            data={
+                "criar_acesso": "on",
+                "email_acesso": "empresa-b@example.com",
+                "senha_acesso": "SenhaForte123!",
+                "senha_confirmacao_acesso": "SenhaForte123!",
+                "nome": "Profissional Duplicado",
+                "especialidade": "Corte",
+                "telefone": "65999996666",
+                "email": "",
+                "cpf": "",
+                "data_nascimento": "",
+                "endereco": "",
+                "ativo": "on",
+                "observacoes": "",
+            },
+            empresa=self.empresa_a,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("email_acesso", form.errors)
+
 
 class CadastroEmpresaBrandingFieldsTests(TestCase):
     def test_pagina_cadastro_exibe_campos_de_branding_e_color_picker(self):
