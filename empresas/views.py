@@ -5,10 +5,17 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from django.db import transaction
-from .forms import CadastroEmpresaForm
+from .forms import (
+    CadastroEmpresaForm,
+    EmpresaConfiguracaoForm,
+    parse_profissional_modules_from_post,
+    profissional_module_choices,
+)
 from .models import Empresa
 from .business_profiles import get_business_profile, get_registration_profiles_payload
 from .tenancy import get_accessible_empresas, set_active_empresa
+from .permissions import can_manage_empresa_settings, is_profissional_user
+from profissionais.models import Profissional
 
 def cadastro_empresa(request):
     if request.method == 'POST':
@@ -82,3 +89,49 @@ def selecionar_empresa(request):
     empresa = get_object_or_404(empresas, pk=empresa_id)
     set_active_empresa(request, empresa)
     return redirect(destino)
+
+
+@login_required
+def empresa_configuracoes(request):
+    empresas = get_accessible_empresas(request)
+    if not empresas.exists():
+        return redirect('cadastro_empresa')
+
+    empresa = empresas.first()
+    if request.user.is_authenticated:
+        empresa_id = request.session.get('empresa_ativa_id')
+        if empresa_id:
+            empresa = empresas.filter(pk=empresa_id).first() or empresa
+
+    if not can_manage_empresa_settings(request.user, empresa):
+        if is_profissional_user(request.user):
+            messages.warning(request, 'Somente administrador pode abrir as configuracoes da empresa.')
+        else:
+            messages.error(request, 'Voce nao possui permissao para alterar esta empresa.')
+        return redirect('dashboard_home')
+
+    profissionais = list(
+        Profissional.objects.filter(empresa=empresa).select_related('usuario').order_by('nome')
+    )
+
+    if request.method == 'POST':
+        form = EmpresaConfiguracaoForm(request.POST, instance=empresa)
+        if form.is_valid():
+            form.save()
+
+            modulo_updates = parse_profissional_modules_from_post(request.POST, profissionais)
+            for profissional in profissionais:
+                profissional.acessos_modulos = modulo_updates.get(profissional.pk, profissional.get_allowed_modules())
+                profissional.save(update_fields=['acessos_modulos'])
+
+            messages.success(request, 'Configuracoes da empresa atualizadas com sucesso.')
+            return redirect('empresa_configuracoes')
+    else:
+        form = EmpresaConfiguracaoForm(instance=empresa)
+
+    return render(request, 'empresas/empresa_configuracoes.html', {
+        'form': form,
+        'empresa': empresa,
+        'profissionais': profissionais,
+        'module_choices': profissional_module_choices(),
+    })

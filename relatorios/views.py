@@ -10,7 +10,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from empresas.tenancy import get_active_empresa
-from empresas.permissions import is_profissional_user
+from empresas.permissions import (
+    PROFISSIONAL_ACCESS_RELATORIOS,
+    user_can_access_module,
+)
 from dashboard.models import DashboardPreference
 
 
@@ -97,8 +100,8 @@ def get_report_card_definitions(empresa):
 
 @login_required
 def relatorio_page(request):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_RELATORIOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de relatorios.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)
@@ -136,7 +139,7 @@ def relatorio_page(request):
 
 @login_required
 def dashboard(request):
-    if is_profissional_user(request.user):
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_RELATORIOS):
         return JsonResponse({'detail': 'Perfil sem permissao para relatorios.'}, status=403)
 
     empresa = get_active_empresa(request)
@@ -173,7 +176,7 @@ class ExecutarRelatorioView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        if is_profissional_user(request.user):
+        if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_RELATORIOS):
             return Response({'detail': 'Perfil sem permissao para relatorios.'}, status=403)
 
         empresa = get_active_empresa(request)
@@ -190,7 +193,7 @@ class ExecutarRelatorioView(APIView):
 
 @login_required
 def dashboard_vendas(request):
-    if is_profissional_user(request.user):
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_RELATORIOS):
         return JsonResponse({'detail': 'Perfil sem permissao para relatorios.'}, status=403)
 
     empresa = get_active_empresa(request)

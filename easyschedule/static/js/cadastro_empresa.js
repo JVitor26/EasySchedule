@@ -133,6 +133,12 @@ document.addEventListener("DOMContentLoaded", () => {
     function refreshBrandingPreviews() {
         updateEmailHeaderPreview();
         updateWhatsAppPreview();
+
+        if (window.EasyScheduleTheme && typeof window.EasyScheduleTheme.applyCompanyBranding === "function") {
+            const primary = resolveColor(ids.primaryColorInput, "#0f4c81");
+            const secondary = resolveColor(ids.secondaryColorInput, "#188fa7");
+            window.EasyScheduleTheme.applyCompanyBranding(primary, secondary);
+        }
     }
 
     function bindColorPicker(input, picker, fallbackColor, onChange) {

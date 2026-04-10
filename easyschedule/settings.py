@@ -15,6 +15,13 @@ def _env_list(name, default=""):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _env_bool(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _host_to_csrf_origins(host):
     clean_host = host.strip()
     if not clean_host:
@@ -177,7 +184,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # 📧 Email
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', True)
+EMAIL_USE_SSL = _env_bool('EMAIL_USE_SSL', False)
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '15'))
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@easyschedule.local')
+SERVER_EMAIL = os.getenv('SERVER_EMAIL', DEFAULT_FROM_EMAIL)
 
 
 # 📲 Integrações

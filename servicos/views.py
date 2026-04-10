@@ -5,12 +5,15 @@ from .forms import ServicoForm
 from django.contrib.auth.decorators import login_required
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
-from empresas.permissions import is_profissional_user
+from empresas.permissions import (
+    PROFISSIONAL_ACCESS_SERVICOS,
+    user_can_access_module,
+)
 
 @login_required
 def servicos_list(request):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_SERVICOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de servicos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)
@@ -24,8 +27,8 @@ def servicos_list(request):
 
 @login_required
 def servicos_form(request, pk=None):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_SERVICOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de servicos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)
@@ -60,8 +63,8 @@ def servicos_form(request, pk=None):
 
 @login_required
 def servicos_delete(request, pk):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_SERVICOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de servicos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)

@@ -44,6 +44,8 @@
     --accent-gradient: linear-gradient(135deg, #3ddc84 0%, #22c55e 48%, #0f766e 100%);
     --accent-gradient-soft: linear-gradient(135deg, rgba(61, 220, 132, 0.12), rgba(34, 197, 94, 0.08), rgba(15, 118, 110, 0.16));
     --danger-gradient: linear-gradient(135deg, #fb7185 0%, #f87171 50%, #ef4444 100%);
+    --brand-glow-1: rgba(34, 197, 94, 0.12);
+    --brand-glow-2: rgba(20, 184, 166, 0.12);
     --page-background:
         radial-gradient(circle at top left, rgba(34, 197, 94, 0.16), transparent 32%),
         radial-gradient(circle at top right, rgba(20, 184, 166, 0.16), transparent 26%),
@@ -231,13 +233,13 @@ body::after {
 body::before {
     top: -8rem;
     right: -8rem;
-    background: rgba(34, 197, 94, 0.12);
+    background: var(--brand-glow-1);
 }
 
 body::after {
     bottom: -10rem;
     left: -8rem;
-    background: rgba(20, 184, 166, 0.12);
+    background: var(--brand-glow-2);
 }
 
 a {
@@ -262,7 +264,7 @@ button {
 }
 
 ::selection {
-    background: rgba(52, 211, 153, 0.24);
+    background: var(--accent-soft-strong);
     color: var(--text-1);
 }
 

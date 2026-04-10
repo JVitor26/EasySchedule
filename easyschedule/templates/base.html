@@ -1,6 +1,10 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="pt-br">
+<html
+    lang="pt-br"
+    data-company-primary="{% if empresa_atual %}{{ empresa_atual.cor_primaria|default:'' }}{% endif %}"
+    data-company-secondary="{% if empresa_atual %}{{ empresa_atual.cor_secundaria|default:'' }}{% endif %}"
+>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,11 +35,15 @@
             <div class="app-navbar">
                 <a class="app-brand" href="{% if user.is_authenticated %}{% url 'dashboard_home' %}{% else %}{% url 'cliente_home' %}{% endif %}">
                     <span class="brand-mark">
+                        {% if user.is_authenticated and empresa_atual and empresa_atual.logo_url %}
+                        <img src="{{ empresa_atual.logo_url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo">
+                        {% else %}
                         <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="brand-logo">
+                        {% endif %}
                     </span>
                     <span class="brand-copy">
-                        <strong>EasySchedule</strong>
-                        <small>{% if user.is_authenticated %}Operacao premium de agenda{% else %}Reserva online com elegancia{% endif %}</small>
+                        <strong>{% if user.is_authenticated and empresa_atual %}{{ empresa_atual.nome }}{% else %}EasySchedule{% endif %}</strong>
+                        <small>{% if user.is_authenticated %}Sistema de agenda personalizado{% else %}Reserva online com elegancia{% endif %}</small>
                     </span>
                 </a>
 
@@ -83,7 +91,7 @@
                     <div class="app-toolbar">
                         <div class="toolbar-field">
                             <span>Tema</span>
-                            <select id="themePicker" class="theme-picker" aria-label="Selecionar tema do sistema">
+                            <select id="themePickerPublic" class="theme-picker" data-theme-picker aria-label="Selecionar tema do sistema">
                                 <option value="dark">Escuro Esmeralda</option>
                                 <option value="light">Branco Marfim</option>
                                 <option value="sage">Savia Premium</option>
@@ -108,25 +116,54 @@
             </div>
 
             <nav class="app-sidebar-nav" aria-label="Navegacao lateral">
+                {% if usuario_modulos.dashboard %}
                 <a class="app-sidebar-link {% if '/dashboard/' in request.path %}is-active{% endif %}" href="{% url 'dashboard_home' %}">Agenda</a>
+                {% endif %}
                 {% if not usuario_e_profissional %}
+                {% if usuario_modulos.clientes %}
                 <a class="app-sidebar-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
+                {% endif %}
+                {% if usuario_modulos.servicos %}
                 <a class="app-sidebar-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">{{ business_profile.service_term_plural|default:"Servicos" }}</a>
+                {% endif %}
+                {% if usuario_modulos.produtos %}
                 <a class="app-sidebar-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
+                {% endif %}
                 <a class="app-sidebar-link {% if '/profissionais/' in request.path %}is-active{% endif %}" href="{% url 'profissionais_list' %}">{{ business_profile.professional_term_plural|default:"Profissionais" }}</a>
+                {% if usuario_modulos.agendamentos %}
                 <a class="app-sidebar-link {% if '/agendamentos/' in request.path and '/agendamentos/planos/' not in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">{{ business_profile.appointment_term_plural|default:"Agendamentos" }}</a>
+                {% endif %}
                 <a class="app-sidebar-link {% if '/agendamentos/planos/' in request.path %}is-active{% endif %}" href="{% url 'planos_list' %}">Planos mensais</a>
+                {% if usuario_modulos.relatorios %}
                 <a class="app-sidebar-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
+                {% endif %}
                 <a class="app-sidebar-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Portal do cliente</a>
+                {% if usuario_pode_configurar_empresa %}
+                <a class="app-sidebar-link {% if '/empresas/configuracoes/' in request.path %}is-active{% endif %}" href="{% url 'empresa_configuracoes' %}">Configuracoes</a>
+                {% endif %}
                 {% else %}
+                {% if usuario_modulos.agendamentos %}
                 <a class="app-sidebar-link {% if '/agendamentos/' in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">Minha agenda</a>
+                {% endif %}
+                {% if usuario_modulos.clientes %}
+                <a class="app-sidebar-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
+                {% endif %}
+                {% if usuario_modulos.servicos %}
+                <a class="app-sidebar-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">{{ business_profile.service_term_plural|default:"Servicos" }}</a>
+                {% endif %}
+                {% if usuario_modulos.produtos %}
+                <a class="app-sidebar-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
+                {% endif %}
+                {% if usuario_modulos.relatorios %}
+                <a class="app-sidebar-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
+                {% endif %}
                 {% endif %}
             </nav>
 
             <div class="app-sidebar-card sidebar-theme-card">
                 <span class="sidebar-kicker">Aparencia</span>
-                <label for="themePicker" class="sidebar-theme-label">Tema ativo</label>
-                <select id="themePicker" class="theme-picker" aria-label="Selecionar tema do sistema">
+                <label for="themePickerSidebar" class="sidebar-theme-label">Tema ativo</label>
+                <select id="themePickerSidebar" class="theme-picker" data-theme-picker aria-label="Selecionar tema do sistema">
                     <option value="dark">Escuro Esmeralda</option>
                     <option value="light">Branco Marfim</option>
                     <option value="sage">Savia Premium</option>
@@ -160,16 +197,45 @@
 
     <nav class="app-mobile-nav" aria-label="Navegacao mobile">
         {% if user.is_authenticated %}
+            {% if usuario_modulos.dashboard %}
             <a class="app-mobile-link {% if '/dashboard/' in request.path %}is-active{% endif %}" href="{% url 'dashboard_home' %}">Agenda</a>
+            {% endif %}
             {% if not usuario_e_profissional %}
+                {% if usuario_modulos.agendamentos %}
                 <a class="app-mobile-link {% if '/agendamentos/' in request.path and '/agendamentos/planos/' not in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">{{ business_profile.appointment_term_plural|default:"Agenda" }}</a>
+                {% endif %}
+                {% if usuario_modulos.servicos %}
                 <a class="app-mobile-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">{{ business_profile.service_term_plural|default:"Servicos" }}</a>
+                {% endif %}
+                {% if usuario_modulos.produtos %}
                 <a class="app-mobile-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
+                {% endif %}
+                {% if usuario_modulos.clientes %}
                 <a class="app-mobile-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
+                {% endif %}
+                {% if usuario_modulos.relatorios %}
                 <a class="app-mobile-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
+                {% endif %}
                 <a class="app-mobile-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Portal</a>
+                {% if usuario_pode_configurar_empresa %}
+                <a class="app-mobile-link {% if '/empresas/configuracoes/' in request.path %}is-active{% endif %}" href="{% url 'empresa_configuracoes' %}">Config</a>
+                {% endif %}
             {% else %}
+                {% if usuario_modulos.agendamentos %}
                 <a class="app-mobile-link {% if '/agendamentos/' in request.path %}is-active{% endif %}" href="{% url 'agendamentos_list' %}">Minha agenda</a>
+                {% endif %}
+                {% if usuario_modulos.clientes %}
+                <a class="app-mobile-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">Clientes</a>
+                {% endif %}
+                {% if usuario_modulos.servicos %}
+                <a class="app-mobile-link {% if '/servicos/' in request.path %}is-active{% endif %}" href="{% url 'servicos_list' %}">Servicos</a>
+                {% endif %}
+                {% if usuario_modulos.produtos %}
+                <a class="app-mobile-link {% if '/produtos/' in request.path %}is-active{% endif %}" href="{% url 'produtos_list' %}">Produtos</a>
+                {% endif %}
+                {% if usuario_modulos.relatorios %}
+                <a class="app-mobile-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
+                {% endif %}
             {% endif %}
         {% else %}
             <a class="app-mobile-link {% if '/cliente/' in request.path or request.path == '/' %}is-active{% endif %}" href="{% url 'cliente_home' %}">Cliente</a>

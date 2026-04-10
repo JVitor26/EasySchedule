@@ -12,6 +12,7 @@ from profissionais.forms import ProfissionalForm
 from profissionais.models import Profissional
 from servicos.forms import ServicoForm
 from servicos.models import Servico
+from empresas.permissions import PROFISSIONAL_ACCESS_CLIENTES, PROFISSIONAL_ACCESS_SERVICOS
 
 
 class MultiEmpresaIsolationTests(TestCase):
@@ -205,3 +206,98 @@ class CadastroEmpresaBrandingFieldsTests(TestCase):
         self.assertContains(response, 'id="brandingWhatsappPreviewHeader"')
         self.assertContains(response, 'id="brandingWhatsappPreviewCustomer"')
         self.assertContains(response, 'id="brandingWhatsappPreviewProfessional"')
+
+
+class EmpresaConfiguracoesTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="owner@example.com",
+            email="owner@example.com",
+            password="senha-forte-123",
+        )
+        self.empresa = Empresa.objects.create(
+            usuario=self.owner,
+            nome="Studio Central",
+            tipo="barbearia",
+            cnpj="12345678000199",
+            whatsapp="65999990000",
+            logo_url="https://cdn.example.com/old-logo.png",
+            cor_primaria="#2255aa",
+            cor_secundaria="#11aa88",
+        )
+
+        self.prof_user = User.objects.create_user(
+            username="prof@example.com",
+            email="prof@example.com",
+            password="senha-forte-123",
+        )
+        self.profissional = Profissional.objects.create(
+            empresa=self.empresa,
+            usuario=self.prof_user,
+            nome="Rafa",
+            especialidade="Corte",
+            telefone="65999993333",
+            email="rafa@example.com",
+            acessos_modulos=["agendamentos"],
+        )
+
+    def test_owner_can_update_empresa_and_profissional_modules(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.post(
+            reverse("empresa_configuracoes"),
+            {
+                "nome": "Studio Premium",
+                "tipo": "manicure",
+                "whatsapp": "(65) 98888-7777",
+                "logo_url": "https://cdn.example.com/new-logo.png",
+                "cor_primaria": "#0f4c81",
+                "cor_secundaria": "#188fa7",
+                f"acessos_{self.profissional.pk}": [
+                    PROFISSIONAL_ACCESS_CLIENTES,
+                    PROFISSIONAL_ACCESS_SERVICOS,
+                ],
+            },
+        )
+
+        self.assertRedirects(response, reverse("empresa_configuracoes"))
+
+        self.empresa.refresh_from_db()
+        self.profissional.refresh_from_db()
+
+        self.assertEqual(self.empresa.nome, "Studio Premium")
+        self.assertEqual(self.empresa.tipo, "manicure")
+        self.assertEqual(self.empresa.whatsapp, "65988887777")
+        self.assertEqual(self.empresa.logo_url, "https://cdn.example.com/new-logo.png")
+        self.assertEqual(self.empresa.cor_primaria, "#0f4c81")
+        self.assertEqual(self.empresa.cor_secundaria, "#188fa7")
+        self.assertIn(PROFISSIONAL_ACCESS_CLIENTES, self.profissional.acessos_modulos)
+        self.assertIn(PROFISSIONAL_ACCESS_SERVICOS, self.profissional.acessos_modulos)
+
+    def test_profissional_sem_modulo_clientes_e_bloqueado(self):
+        self.profissional.acessos_modulos = ["agendamentos"]
+        self.profissional.save(update_fields=["acessos_modulos"])
+
+        self.client.force_login(self.prof_user)
+        response = self.client.get(reverse("pessoa_list"))
+
+        self.assertRedirects(response, reverse("dashboard_home"))
+
+    def test_profissional_com_modulo_clientes_tem_acesso(self):
+        self.profissional.acessos_modulos = ["agendamentos", PROFISSIONAL_ACCESS_CLIENTES]
+        self.profissional.save(update_fields=["acessos_modulos"])
+
+        self.client.force_login(self.prof_user)
+        response = self.client.get(reverse("pessoa_list"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_cabecalho_mostra_logo_da_empresa(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("dashboard_home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "https://cdn.example.com/old-logo.png")
+        self.assertContains(response, 'data-company-primary="#2255aa"')
+        self.assertContains(response, 'data-company-secondary="#11aa88"')

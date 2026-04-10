@@ -4,7 +4,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models import Sum
 
 from empresas.tenancy import get_active_empresa
-from empresas.permissions import is_profissional_user
+from empresas.permissions import (
+    PROFISSIONAL_ACCESS_PRODUTOS,
+    user_can_access_module,
+)
 
 from .forms import ProdutoForm, VendaForm
 from .models import Produto, VendaProduto
@@ -23,8 +26,8 @@ def _is_owner(request, empresa):
 
 @login_required
 def produtos_list(request):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_PRODUTOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de produtos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)
@@ -41,8 +44,8 @@ def produtos_list(request):
 
 @login_required
 def produtos_form(request, pk=None):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_PRODUTOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de produtos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)
@@ -74,8 +77,8 @@ def produtos_form(request, pk=None):
 
 @login_required
 def produtos_delete(request, pk):
-    if is_profissional_user(request.user):
-        messages.warning(request, 'Seu perfil possui acesso apenas para a area de agenda.')
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_PRODUTOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de produtos.')
         return redirect('dashboard_home')
 
     empresa = get_active_empresa(request)

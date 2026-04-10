@@ -6,6 +6,8 @@ from .business_profiles import (
     normalize_business_type,
 )
 from .models import Empresa
+from profissionais.models import Profissional
+from .permissions import PROFISSIONAL_MODULE_CHOICES, normalize_profissional_modules
 
 
 def _normalize_hex_color(value):
@@ -127,3 +129,63 @@ class CadastroEmpresaForm(forms.Form):
 
     def clean_cor_secundaria(self):
         return _normalize_hex_color(self.cleaned_data.get('cor_secundaria'))
+
+
+class EmpresaConfiguracaoForm(forms.ModelForm):
+    tipo = forms.ChoiceField(label='Tipo de empresa', choices=get_business_type_choices())
+    cor_primaria = forms.CharField(label='Cor primaria (hex opcional)', max_length=7, required=False)
+    cor_secundaria = forms.CharField(label='Cor secundaria (hex opcional)', max_length=7, required=False)
+
+    class Meta:
+        model = Empresa
+        fields = [
+            'nome',
+            'tipo',
+            'whatsapp',
+            'logo_url',
+            'cor_primaria',
+            'cor_secundaria',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['nome'].label = 'Nome da empresa'
+        self.fields['tipo'].label = 'Tipo de empresa'
+        self.fields['whatsapp'].label = 'WhatsApp da empresa'
+        self.fields['logo_url'].label = 'Logo da empresa (URL opcional)'
+
+        self.fields['nome'].widget.attrs.update({'placeholder': 'Ex.: Studio Bela Vista'})
+        self.fields['whatsapp'].widget.attrs.update({'placeholder': '(65) 99999-9999'})
+        self.fields['logo_url'].widget.attrs.update({'placeholder': 'https://seusite.com/logo.png'})
+        self.fields['cor_primaria'].widget.attrs.update({'placeholder': '#0f4c81'})
+        self.fields['cor_secundaria'].widget.attrs.update({'placeholder': '#188fa7'})
+
+    def clean_tipo(self):
+        return normalize_business_type(self.cleaned_data['tipo'])
+
+    def clean_whatsapp(self):
+        return ''.join(filter(str.isdigit, self.cleaned_data.get('whatsapp', '')))
+
+    def clean_logo_url(self):
+        return (self.cleaned_data.get('logo_url') or '').strip()
+
+    def clean_cor_primaria(self):
+        return _normalize_hex_color(self.cleaned_data.get('cor_primaria'))
+
+    def clean_cor_secundaria(self):
+        return _normalize_hex_color(self.cleaned_data.get('cor_secundaria'))
+
+
+def parse_profissional_modules_from_post(request_post, profissionais):
+    updates = {}
+    valid = {key for key, _label in PROFISSIONAL_MODULE_CHOICES}
+
+    for profissional in profissionais:
+        selected = [key for key in request_post.getlist(f'acessos_{profissional.pk}') if key in valid]
+        updates[profissional.pk] = normalize_profissional_modules(selected)
+
+    return updates
+
+
+def profissional_module_choices():
+    return list(Profissional.MODULE_CHOICES)

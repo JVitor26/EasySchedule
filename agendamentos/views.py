@@ -11,12 +11,20 @@ from datetime import datetime, timedelta
 import json
 from empresas.business_profiles import get_business_profile
 from empresas.tenancy import get_active_empresa
-from empresas.permissions import is_profissional_user
+from empresas.permissions import (
+    PROFISSIONAL_ACCESS_AGENDAMENTOS,
+    is_profissional_user,
+    user_can_access_module,
+)
 from core.notifications import notify_booking_created
 
 
 @login_required
 def agendamentos_list(request):
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_AGENDAMENTOS):
+        messages.warning(request, 'Seu perfil nao possui acesso ao modulo de agenda.')
+        return redirect('dashboard_home')
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -181,6 +189,9 @@ def agendamentos_delete(request, pk):
 
 @login_required
 def agendamentos_api(request):
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_AGENDAMENTOS):
+        return JsonResponse([], safe=False)
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -251,6 +262,9 @@ def mover_agendamento(request, pk):
     if request.method != 'POST':
         return JsonResponse({'status': 'erro', 'mensagem': 'Método não permitido.'}, status=405)
 
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_AGENDAMENTOS):
+        return JsonResponse({'status': 'erro', 'mensagem': 'Sem permissao para agenda.'}, status=403)
+
     empresa = get_active_empresa(request)
 
     if not empresa:
@@ -313,6 +327,9 @@ VALID_STATUS_TRANSITIONS = {
 def atualizar_status_agendamento(request, pk):
     if request.method != 'POST':
         return JsonResponse({'status': 'erro', 'mensagem': 'Método não permitido.'}, status=405)
+
+    if not user_can_access_module(request.user, PROFISSIONAL_ACCESS_AGENDAMENTOS):
+        return JsonResponse({'status': 'erro', 'mensagem': 'Sem permissao para agenda.'}, status=403)
 
     empresa = get_active_empresa(request)
     if not empresa:
