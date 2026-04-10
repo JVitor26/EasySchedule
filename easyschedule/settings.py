@@ -170,7 +170,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # 📁 Uploads
 MEDIA_URL = '/media/'
-MEDIA_PERSISTENCE_REQUIRED_ON_RENDER = _env_bool("MEDIA_PERSISTENCE_REQUIRED_ON_RENDER", IS_RENDER)
+MEDIA_PERSISTENCE_REQUIRED_ON_RENDER = _env_bool("MEDIA_PERSISTENCE_REQUIRED_ON_RENDER", False)
 
 
 def _ensure_writable_dir(path_obj):
