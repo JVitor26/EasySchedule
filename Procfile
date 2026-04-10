@@ -1,1 +1,1 @@
-web: gunicorn easyschedule.wsgi
+web: sh -c 'python manage.py migrate && DJANGO_SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL:-admin@easyschedule.com}" DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME:-admin}" DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD:-Adminadmin}" DJANGO_SUPERUSER_RESET_PASSWORD="${DJANGO_SUPERUSER_RESET_PASSWORD:-true}" python manage.py create_superuser_env && gunicorn easyschedule.wsgi'
