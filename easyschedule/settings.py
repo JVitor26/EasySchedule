@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -169,6 +170,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # 📁 Uploads
 MEDIA_URL = '/media/'
+MEDIA_PERSISTENCE_REQUIRED_ON_RENDER = _env_bool("MEDIA_PERSISTENCE_REQUIRED_ON_RENDER", IS_RENDER)
 
 
 def _ensure_writable_dir(path_obj):
@@ -184,28 +186,44 @@ def _ensure_writable_dir(path_obj):
 
 def _resolve_media_root():
     fallback_local = BASE_DIR / "media"
+    attempted_paths = []
+
+    def _resolve_candidate(path_obj):
+        attempted_paths.append(str(path_obj))
+        return _ensure_writable_dir(path_obj)
 
     explicit_media_root = os.environ.get("MEDIA_ROOT", "").strip()
     if explicit_media_root:
-        writable = _ensure_writable_dir(Path(explicit_media_root))
+        writable = _resolve_candidate(Path(explicit_media_root))
         if writable:
             return writable
 
     render_media_root = os.environ.get("RENDER_MEDIA_ROOT", "").strip()
     if render_media_root:
-        writable = _ensure_writable_dir(Path(render_media_root))
+        writable = _resolve_candidate(Path(render_media_root))
         if writable:
             return writable
 
     render_disk_path = os.environ.get("RENDER_DISK_PATH", "").strip()
     if render_disk_path:
-        writable = _ensure_writable_dir(Path(render_disk_path) / "media")
+        writable = _resolve_candidate(Path(render_disk_path) / "media")
         if writable:
             return writable
 
     # Only use Render's default persistent path when it is actually writable.
-    if IS_RENDER and _ensure_writable_dir(Path("/var/data/media")):
-        return Path("/var/data/media")
+    render_default_media = Path("/var/data/media")
+    if IS_RENDER:
+        writable_default = _resolve_candidate(render_default_media)
+        if writable_default:
+            return writable_default
+
+    if IS_RENDER and MEDIA_PERSISTENCE_REQUIRED_ON_RENDER:
+        attempted = ", ".join(attempted_paths) if attempted_paths else "nenhum caminho informado"
+        raise ImproperlyConfigured(
+            "MEDIA_ROOT persistente nao encontrado no Render. "
+            f"Tentativas: {attempted}. "
+            "Configure MEDIA_ROOT, RENDER_MEDIA_ROOT ou RENDER_DISK_PATH apontando para disco persistente."
+        )
 
     # Safe fallback prevents 500 on upload when persistent disk is not mounted.
     return _ensure_writable_dir(fallback_local) or fallback_local
