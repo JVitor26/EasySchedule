@@ -21,7 +21,10 @@ if [ -z "$MEDIA_TARGET" ]; then
 	USING_EPHEMERAL_MEDIA=true
 fi
 
-if [ "$IS_RENDER_ENV" = "true" ] && [ "$USING_EPHEMERAL_MEDIA" = "true" ]; then
+REQUIRE_PERSISTENT_MEDIA="${MEDIA_PERSISTENCE_REQUIRED_ON_RENDER:-false}"
+REQUIRE_PERSISTENT_MEDIA="$(printf '%s' "$REQUIRE_PERSISTENT_MEDIA" | tr '[:upper:]' '[:lower:]')"
+
+if [ "$IS_RENDER_ENV" = "true" ] && [ "$USING_EPHEMERAL_MEDIA" = "true" ] && [ "$REQUIRE_PERSISTENT_MEDIA" = "true" ]; then
   echo "ERRO: disco persistente de media nao encontrado no Render."
   echo "Configure MEDIA_ROOT, RENDER_MEDIA_ROOT ou RENDER_DISK_PATH para evitar perda de imagens."
   exit 1
