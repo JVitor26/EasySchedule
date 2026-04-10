@@ -30,6 +30,12 @@
           {% if form.categoria.help_text %}<small class="field-help">{{ form.categoria.help_text }}</small>{% endif %}
           {{ form.categoria.errors }}
         </div>
+        <div class="form-group full" id="categoriaCustomWrap" {% if form.categoria.value != '__nova_categoria__' and not form.categoria_custom.errors %}style="display:none;"{% endif %}>
+          <label>{{ form.categoria_custom.label }}</label>
+          {{ form.categoria_custom }}
+          {% if form.categoria_custom.help_text %}<small class="field-help">{{ form.categoria_custom.help_text }}</small>{% endif %}
+          {{ form.categoria_custom.errors }}
+        </div>
         <div class="form-group">
           <label>{{ form.preco.label }}</label>
           {{ form.preco }}
@@ -57,5 +63,31 @@
     </form>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const categoriaSelect = document.getElementById('{{ form.categoria.id_for_label }}');
+  const categoriaCustomWrap = document.getElementById('categoriaCustomWrap');
+  const categoriaCustomInput = document.getElementById('{{ form.categoria_custom.id_for_label }}');
+  const customValue = '__nova_categoria__';
+
+  if (!categoriaSelect || !categoriaCustomWrap || !categoriaCustomInput) {
+    return;
+  }
+
+  const updateCustomVisibility = () => {
+    const isCustom = categoriaSelect.value === customValue;
+    categoriaCustomWrap.style.display = isCustom ? 'block' : 'none';
+    if (isCustom) {
+      categoriaCustomInput.setAttribute('required', 'required');
+    } else {
+      categoriaCustomInput.removeAttribute('required');
+    }
+  };
+
+  categoriaSelect.addEventListener('change', updateCustomVisibility);
+  updateCustomVisibility();
+});
+</script>
 
 {% endblock %}

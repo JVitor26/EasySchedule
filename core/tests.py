@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core import mail
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -166,6 +167,203 @@ class PublicCustomerBookingTests(TestCase):
         )
         self.assertEqual(agendamento.pagamento_status, "pendente")
         self.assertEqual(agendamento.metodo_pagamento, "")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_cliente_publico_recebe_confirmacao_por_email_para_cliente_e_profissional(self):
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.pk]),
+            {
+                "nome": "Joao Cliente",
+                "email": "joao@example.com",
+                "telefone": "(65) 99999-1111",
+                "documento": "98765432100",
+                "data_nascimento": "1995-05-10",
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+                "observacoes": "Prefere corte baixo.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 2)
+
+        emails_por_destinatario = {
+            email.to[0]: email
+            for email in mail.outbox
+            if email.to
+        }
+        self.assertIn("joao@example.com", emails_por_destinatario)
+        self.assertIn("rafael@example.com", emails_por_destinatario)
+
+        email_cliente = emails_por_destinatario["joao@example.com"]
+        self.assertEqual(email_cliente.subject, f"Confirmacao do seu agendamento - {self.empresa.nome}")
+        self.assertIn("Experiencia confirmada para voce.", email_cliente.body)
+        self.assertTrue(email_cliente.alternatives)
+        cliente_alternativa = email_cliente.alternatives[0]
+        cliente_html = getattr(cliente_alternativa, "content", cliente_alternativa[0])
+        cliente_mime = getattr(cliente_alternativa, "mimetype", cliente_alternativa[1])
+        self.assertEqual(cliente_mime, "text/html")
+        self.assertIn("Agendamento confirmado", cliente_html)
+        self.assertIn(">BT</span>", cliente_html)
+        self.assertIn("Barbearia", cliente_html)
+        self.assertIn("#0b3a61", cliente_html)
+
+        email_profissional = emails_por_destinatario["rafael@example.com"]
+        self.assertEqual(email_profissional.subject, f"Novo agendamento recebido - {self.empresa.nome}")
+        self.assertIn("Voce recebeu um novo agendamento.", email_profissional.body)
+        self.assertIn("Cliente: Joao Cliente", email_profissional.body)
+        self.assertTrue(email_profissional.alternatives)
+        profissional_alternativa = email_profissional.alternatives[0]
+        profissional_html = getattr(profissional_alternativa, "content", profissional_alternativa[0])
+        profissional_mime = getattr(profissional_alternativa, "mimetype", profissional_alternativa[1])
+        self.assertEqual(profissional_mime, "text/html")
+        self.assertIn("Novo agendamento recebido", profissional_html)
+        self.assertIn(">BT</span>", profissional_html)
+        self.assertIn("Barbearia", profissional_html)
+        self.assertIn("#0b3a61", profissional_html)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_cliente_publico_recebe_confirmacao_por_email_no_pacote_mensal(self):
+        month_reference = self._next_month_reference()
+
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.pk]),
+            {
+                "nome": "Cliente Pacote",
+                "email": "pacote@example.com",
+                "telefone": "(65) 99999-5555",
+                "documento": "99988877766",
+                "data_nascimento": "1994-01-09",
+                "tipo_reserva": "pacote_mensal",
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "mes_referencia": month_reference.isoformat(),
+                "dia_semana": "0",
+                "hora": "10:00",
+                "observacoes": "Pacote das segundas.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 2)
+
+        emails_por_destinatario = {
+            email.to[0]: email
+            for email in mail.outbox
+            if email.to
+        }
+        self.assertIn("pacote@example.com", emails_por_destinatario)
+        self.assertIn("rafael@example.com", emails_por_destinatario)
+
+        email_cliente = emails_por_destinatario["pacote@example.com"]
+        self.assertEqual(email_cliente.subject, f"Confirmacao do seu agendamento - {self.empresa.nome}")
+        self.assertIn("Experiencia confirmada para voce.", email_cliente.body)
+        self.assertTrue(email_cliente.alternatives)
+        cliente_alternativa = email_cliente.alternatives[0]
+        cliente_html = getattr(cliente_alternativa, "content", cliente_alternativa[0])
+        cliente_mime = getattr(cliente_alternativa, "mimetype", cliente_alternativa[1])
+        self.assertEqual(cliente_mime, "text/html")
+        self.assertIn("Agendamento confirmado", cliente_html)
+        self.assertIn(">BT</span>", cliente_html)
+        self.assertIn("Barbearia", cliente_html)
+        self.assertIn("#0b3a61", cliente_html)
+
+        email_profissional = emails_por_destinatario["rafael@example.com"]
+        self.assertEqual(email_profissional.subject, f"Novo agendamento recebido - {self.empresa.nome}")
+        self.assertIn("Voce recebeu um novo agendamento.", email_profissional.body)
+        self.assertIn("Cliente: Cliente Pacote", email_profissional.body)
+        self.assertTrue(email_profissional.alternatives)
+        profissional_alternativa = email_profissional.alternatives[0]
+        profissional_html = getattr(profissional_alternativa, "content", profissional_alternativa[0])
+        profissional_mime = getattr(profissional_alternativa, "mimetype", profissional_alternativa[1])
+        self.assertEqual(profissional_mime, "text/html")
+        self.assertIn("Novo agendamento recebido", profissional_html)
+        self.assertIn(">BT</span>", profissional_html)
+        self.assertIn("Barbearia", profissional_html)
+        self.assertIn("#0b3a61", profissional_html)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_cliente_publico_email_html_usa_branding_personalizado_da_empresa(self):
+        self.empresa.logo_url = "https://cdn.example.com/logo.png"
+        self.empresa.cor_primaria = "#123abc"
+        self.empresa.cor_secundaria = "#ff6600"
+        self.empresa.save(update_fields=["logo_url", "cor_primaria", "cor_secundaria"])
+
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.pk]),
+            {
+                "nome": "Joao Cliente",
+                "email": "joao@example.com",
+                "telefone": "(65) 99999-1111",
+                "documento": "98765432100",
+                "data_nascimento": "1995-05-10",
+                "servico": self.servico.pk,
+                "profissional": self.profissional.pk,
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+                "observacoes": "Prefere corte baixo.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 2)
+
+        for email in mail.outbox:
+            self.assertTrue(email.alternatives)
+            alternativa = email.alternatives[0]
+            html = getattr(alternativa, "content", alternativa[0])
+
+            self.assertIn("https://cdn.example.com/logo.png", html)
+            self.assertIn("#123abc", html)
+            self.assertIn("#ff6600", html)
+            self.assertNotIn(">BT</span>", html)
+
+    def test_cliente_publico_recebe_confirmacao_por_whatsapp_com_mensagem_personalizada(self):
+        self.empresa.logo_url = "https://cdn.example.com/logo.png"
+        self.empresa.save(update_fields=["logo_url"])
+
+        with patch("core.notifications._send_whatsapp") as whatsapp_mock, patch("core.notifications._send_email"):
+            response = self.client.post(
+                reverse("cliente_empresa", args=[self.empresa.pk]),
+                {
+                    "nome": "Joao Cliente",
+                    "email": "joao@example.com",
+                    "telefone": "(65) 99999-1111",
+                    "documento": "98765432100",
+                    "data_nascimento": "1995-05-10",
+                    "servico": self.servico.pk,
+                    "profissional": self.profissional.pk,
+                    "data": self.data_agendamento.isoformat(),
+                    "hora": "10:00",
+                    "observacoes": "Prefere corte baixo.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(whatsapp_mock.call_count, 2)
+
+        mensagens_por_telefone = {
+            call.args[0]: call.args[1]
+            for call in whatsapp_mock.call_args_list
+            if len(call.args) >= 2
+        }
+
+        self.assertIn("65999991111", mensagens_por_telefone)
+        self.assertIn("65999999999", mensagens_por_telefone)
+
+        mensagem_cliente = mensagens_por_telefone["65999991111"]
+        self.assertIn("Barbearia Teste | Confirmacao de agendamento", mensagem_cliente)
+        self.assertIn("Segmento: Barbearia", mensagem_cliente)
+        self.assertIn("Status: Pendente", mensagem_cliente)
+        self.assertIn("Logo: https://cdn.example.com/logo.png", mensagem_cliente)
+
+        mensagem_profissional = mensagens_por_telefone["65999999999"]
+        self.assertIn("Barbearia Teste | Novo agendamento recebido", mensagem_profissional)
+        self.assertIn("Cliente: Joao Cliente", mensagem_profissional)
+        self.assertIn("Status: Pendente", mensagem_profissional)
+        self.assertIn("Logo: https://cdn.example.com/logo.png", mensagem_profissional)
 
     def test_api_hold_reserva_horario_temporariamente(self):
         response = self.client.post(

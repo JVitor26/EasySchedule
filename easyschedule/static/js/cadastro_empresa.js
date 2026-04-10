@@ -20,7 +20,146 @@ document.addEventListener("DOMContentLoaded", () => {
         previewServices: document.getElementById("businessPreviewServices"),
         previewAppointments: document.getElementById("businessPreviewAppointments"),
         previewPoints: document.getElementById("businessPreviewPoints"),
+        primaryColorInput: document.getElementById("id_cor_primaria"),
+        secondaryColorInput: document.getElementById("id_cor_secundaria"),
+        primaryColorPicker: document.getElementById("id_cor_primaria_picker"),
+        secondaryColorPicker: document.getElementById("id_cor_secundaria_picker"),
+        emailPreviewHeader: document.getElementById("brandingEmailPreviewHeader"),
+        emailPreviewMonogram: document.getElementById("brandingEmailPreviewMonogram"),
+        emailPreviewCompany: document.getElementById("brandingEmailPreviewCompany"),
+        emailPreviewType: document.getElementById("brandingEmailPreviewType"),
+        whatsappPreviewHeader: document.getElementById("brandingWhatsappPreviewHeader"),
+        whatsappPreviewCustomer: document.getElementById("brandingWhatsappPreviewCustomer"),
+        whatsappPreviewProfessional: document.getElementById("brandingWhatsappPreviewProfessional"),
     };
+
+    function normalizeHexColor(value) {
+        const raw = (value || "").trim().toLowerCase();
+        if (!raw) {
+            return "";
+        }
+        return raw.startsWith("#") ? raw : `#${raw}`;
+    }
+
+    function isHexColor(value) {
+        return /^#[0-9a-f]{6}$/i.test(value || "");
+    }
+
+    function buildMonogram(companyName) {
+        const parts = (companyName || "")
+            .replace(/[^a-zA-Z0-9]+/g, " ")
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+
+        if (parts.length >= 2) {
+            return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+        }
+        if (parts.length === 1) {
+            return parts[0].slice(0, 2).toUpperCase();
+        }
+        return "ES";
+    }
+
+    function resolveColor(inputElement, fallbackColor) {
+        const normalized = normalizeHexColor(inputElement ? inputElement.value : "");
+        if (isHexColor(normalized)) {
+            return normalized.toLowerCase();
+        }
+        return fallbackColor;
+    }
+
+    function updateEmailHeaderPreview() {
+        if (!ids.emailPreviewHeader) {
+            return;
+        }
+
+        const primary = resolveColor(ids.primaryColorInput, "#0f4c81");
+        const secondary = resolveColor(ids.secondaryColorInput, "#188fa7");
+        const companyName = (ids.companyInput && ids.companyInput.value.trim()) || "Sua empresa";
+        const profile = profiles[select.value] || profiles.outro || {};
+
+        ids.emailPreviewHeader.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+
+        if (ids.emailPreviewMonogram) {
+            ids.emailPreviewMonogram.textContent = buildMonogram(companyName);
+        }
+        if (ids.emailPreviewCompany) {
+            ids.emailPreviewCompany.textContent = companyName;
+        }
+        if (ids.emailPreviewType) {
+            ids.emailPreviewType.textContent = profile.label || "Negocio de servicos";
+        }
+    }
+
+    function updateWhatsAppPreview() {
+        if (!ids.whatsappPreviewCustomer || !ids.whatsappPreviewProfessional) {
+            return;
+        }
+
+        const primary = resolveColor(ids.primaryColorInput, "#0f4c81");
+        const secondary = resolveColor(ids.secondaryColorInput, "#188fa7");
+        const companyName = (ids.companyInput && ids.companyInput.value.trim()) || "Sua empresa";
+        const profile = profiles[select.value] || profiles.outro || {};
+        const profileLabel = profile.label || "Negocio de servicos";
+
+        if (ids.whatsappPreviewHeader) {
+            ids.whatsappPreviewHeader.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+        }
+
+        ids.whatsappPreviewCustomer.textContent = [
+            `${companyName} | Confirmacao de agendamento`,
+            `Segmento: ${profileLabel}`,
+            "Servico: Corte completo",
+            "Profissional: Rafael",
+            "Data: 12/05/2026",
+            "Hora: 10:00",
+            "Status: Pendente",
+            "Nos vemos em breve!",
+        ].join("\n");
+
+        ids.whatsappPreviewProfessional.textContent = [
+            `${companyName} | Novo agendamento recebido`,
+            `Segmento: ${profileLabel}`,
+            "Cliente: Joao Cliente",
+            "Servico: Corte completo",
+            "Data: 12/05/2026",
+            "Hora: 10:00",
+            "Status: Pendente",
+            "Acesse a agenda para acompanhar os detalhes.",
+        ].join("\n");
+    }
+
+    function refreshBrandingPreviews() {
+        updateEmailHeaderPreview();
+        updateWhatsAppPreview();
+    }
+
+    function bindColorPicker(input, picker, fallbackColor, onChange) {
+        if (!input || !picker) {
+            return;
+        }
+
+        const normalized = normalizeHexColor(input.value);
+        picker.value = isHexColor(normalized) ? normalized : fallbackColor;
+
+        input.addEventListener("input", () => {
+            const parsed = normalizeHexColor(input.value);
+            if (isHexColor(parsed)) {
+                picker.value = parsed;
+            }
+            if (onChange) {
+                onChange();
+            }
+        });
+
+        picker.addEventListener("input", () => {
+            input.value = picker.value.toLowerCase();
+            if (onChange) {
+                onChange();
+            }
+        });
+    }
 
     function renderProfile(profileKey) {
         const profile = profiles[profileKey] || profiles.outro;
@@ -50,7 +189,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     select.addEventListener("change", (event) => {
         renderProfile(event.target.value);
+        refreshBrandingPreviews();
     });
+
+    if (ids.companyInput) {
+        ids.companyInput.addEventListener("input", refreshBrandingPreviews);
+    }
 
     // 🎨 Visual Plan Selector
     const planoSelector = document.getElementById("plano-selector");
@@ -134,6 +278,9 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     renderPlans();
+
+    bindColorPicker(ids.primaryColorInput, ids.primaryColorPicker, "#0f4c81", refreshBrandingPreviews);
+    bindColorPicker(ids.secondaryColorInput, ids.secondaryColorPicker, "#188fa7", refreshBrandingPreviews);
     
     document.querySelectorAll('input[name="plano"]').forEach((input) => {
         input.addEventListener("change", window.updateLimitField);
@@ -141,4 +288,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.updateLimitField();
     renderProfile(select.value);
+    refreshBrandingPreviews();
 });

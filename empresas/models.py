@@ -1,6 +1,21 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+import re
 from .business_profiles import get_business_profile, normalize_business_type
+
+
+def _normalize_hex_color(value):
+    raw = (value or "").strip().lower()
+    if not raw:
+        return ""
+
+    if not raw.startswith("#"):
+        raw = f"#{raw}"
+
+    if re.fullmatch(r"#[0-9a-f]{6}", raw):
+        return raw
+
+    return ""
 
 class Empresa(models.Model):    
     PLANO_START = "start"
@@ -16,6 +31,9 @@ class Empresa(models.Model):
     tipo = models.CharField(max_length=50)
     cnpj = models.CharField(max_length=18, blank=True, null=True)
     whatsapp = models.CharField(max_length=20, blank=True, default="")
+    logo_url = models.URLField(blank=True, default="")
+    cor_primaria = models.CharField(max_length=7, blank=True, default="")
+    cor_secundaria = models.CharField(max_length=7, blank=True, default="")
     plano = models.CharField(max_length=20, choices=PLANO_CHOICES, default=PLANO_START)
     valor_mensal = models.DecimalField(max_digits=10, decimal_places=2, default=147)
     limite_profissionais = models.PositiveSmallIntegerField(
@@ -33,6 +51,9 @@ class Empresa(models.Model):
     def save(self, *args, **kwargs):
         self.tipo = normalize_business_type(self.tipo)
         self.whatsapp = "".join(filter(str.isdigit, self.whatsapp or ""))
+        self.logo_url = (self.logo_url or "").strip()
+        self.cor_primaria = _normalize_hex_color(self.cor_primaria)
+        self.cor_secundaria = _normalize_hex_color(self.cor_secundaria)
 
         if self.plano == self.PLANO_SOLO:
             self.limite_profissionais = 1

@@ -185,3 +185,23 @@ class MultiEmpresaIsolationTests(TestCase):
         self.assertIn("barba", categorias_barbearia)
         self.assertEqual(form_manicure.fields["nome"].label, "Nome da manicure")
         self.assertEqual(form_agendamento.fields["profissional"].label, "Barbeiro")
+
+
+class CadastroEmpresaBrandingFieldsTests(TestCase):
+    def test_pagina_cadastro_exibe_campos_de_branding_e_color_picker(self):
+        response = self.client.get(reverse("cadastro_empresa"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="id_logo_url"')
+        self.assertContains(response, 'id="id_cor_primaria"')
+        self.assertContains(response, 'id="id_cor_secundaria"')
+        self.assertContains(response, 'id="id_cor_primaria_picker"')
+        self.assertContains(response, 'id="id_cor_secundaria_picker"')
+        self.assertContains(response, 'type="color"')
+        self.assertContains(response, 'id="brandingEmailPreviewHeader"')
+        self.assertContains(response, 'id="brandingEmailPreviewMonogram"')
+        self.assertContains(response, 'id="brandingEmailPreviewCompany"')
+        self.assertContains(response, 'id="brandingEmailPreviewType"')
+        self.assertContains(response, 'id="brandingWhatsappPreviewHeader"')
+        self.assertContains(response, 'id="brandingWhatsappPreviewCustomer"')
+        self.assertContains(response, 'id="brandingWhatsappPreviewProfessional"')

@@ -1,10 +1,25 @@
 from django import forms
+import re
 from .business_profiles import (
     DEFAULT_BUSINESS_TYPE,
     get_business_type_choices,
     normalize_business_type,
 )
 from .models import Empresa
+
+
+def _normalize_hex_color(value):
+    raw = (value or "").strip().lower()
+    if not raw:
+        return ""
+
+    if not raw.startswith("#"):
+        raw = f"#{raw}"
+
+    if not re.fullmatch(r"#[0-9a-f]{6}", raw):
+        raise forms.ValidationError("Use uma cor hexadecimal valida, como #0f4c81.")
+
+    return raw
 
 class CadastroEmpresaForm(forms.Form):
     nome_completo = forms.CharField(label='Nome completo', max_length=100)
@@ -13,6 +28,9 @@ class CadastroEmpresaForm(forms.Form):
     tipo_empresa = forms.ChoiceField(label='Tipo de empresa', choices=get_business_type_choices())
     nome_empresa = forms.CharField(label='Nome da empresa', max_length=100)
     whatsapp = forms.CharField(label='WhatsApp da empresa', max_length=20, required=False)
+    logo_url = forms.URLField(label='Logo da empresa (URL opcional)', required=False)
+    cor_primaria = forms.CharField(label='Cor primaria (hex opcional)', max_length=7, required=False)
+    cor_secundaria = forms.CharField(label='Cor secundaria (hex opcional)', max_length=7, required=False)
     plano = forms.ChoiceField(label='Plano', choices=Empresa.PLANO_CHOICES, initial=Empresa.PLANO_SOLO)
     limite_profissionais = forms.IntegerField(
         label='Quantidade de funcionarios no plano',
@@ -42,6 +60,18 @@ class CadastroEmpresaForm(forms.Form):
         self.fields['whatsapp'].widget.attrs.update({
             'placeholder': '(65) 99999-9999',
             'autocomplete': 'tel',
+        })
+        self.fields['logo_url'].widget.attrs.update({
+            'placeholder': 'https://seusite.com/logo.png',
+            'autocomplete': 'url',
+        })
+        self.fields['cor_primaria'].widget.attrs.update({
+            'placeholder': '#0f4c81',
+            'autocomplete': 'off',
+        })
+        self.fields['cor_secundaria'].widget.attrs.update({
+            'placeholder': '#188fa7',
+            'autocomplete': 'off',
         })
         self.fields['plano'].widget.attrs.update({
             'id': 'id_plano',
@@ -88,3 +118,12 @@ class CadastroEmpresaForm(forms.Form):
 
     def clean_whatsapp(self):
         return ''.join(filter(str.isdigit, self.cleaned_data.get('whatsapp', '')))
+
+    def clean_logo_url(self):
+        return (self.cleaned_data.get('logo_url') or '').strip()
+
+    def clean_cor_primaria(self):
+        return _normalize_hex_color(self.cleaned_data.get('cor_primaria'))
+
+    def clean_cor_secundaria(self):
+        return _normalize_hex_color(self.cleaned_data.get('cor_secundaria'))

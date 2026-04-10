@@ -432,10 +432,14 @@ class PublicBookingForm(forms.Form):
                         self.add_error(form_field, message)
                 raise
 
+            first_occurrence = plano.first_occurrence
+            if first_occurrence is not None:
+                notify_booking_created(first_occurrence)
+
             return {
                 "tipo_reserva": "pacote_mensal",
                 "cliente": cliente,
-                "agendamento": plano.first_occurrence,
+                "agendamento": first_occurrence,
                 "plano": plano,
             }
 

@@ -112,6 +112,90 @@
       </div>
 
       <div class="auth-fields">
+        <label for="id_logo_url">Logo da empresa (URL opcional)</label>
+        {{ form.logo_url }}
+        {{ form.logo_url.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_cor_primaria">Cor primaria (hex opcional)</label>
+        {{ form.cor_primaria }}
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.5rem;">
+          <input
+            type="color"
+            id="id_cor_primaria_picker"
+            value="#0f4c81"
+            aria-label="Seletor visual da cor primaria"
+            style="width:48px;height:36px;padding:0;border:1px solid var(--border-soft);border-radius:10px;background:transparent;cursor:pointer;"
+          >
+          <small class="form-help">Escolha a cor no seletor ou informe o valor em hexadecimal.</small>
+        </div>
+        {{ form.cor_primaria.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="id_cor_secundaria">Cor secundaria (hex opcional)</label>
+        {{ form.cor_secundaria }}
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.5rem;">
+          <input
+            type="color"
+            id="id_cor_secundaria_picker"
+            value="#188fa7"
+            aria-label="Seletor visual da cor secundaria"
+            style="width:48px;height:36px;padding:0;border:1px solid var(--border-soft);border-radius:10px;background:transparent;cursor:pointer;"
+          >
+          <small class="form-help">A cor secundaria complementa o degradê dos e-mails.</small>
+        </div>
+        {{ form.cor_secundaria.errors }}
+      </div>
+
+      <div class="auth-fields">
+        <label for="brandingEmailPreviewHeader">Preview do cabecalho do e-mail</label>
+        <div style="border:1px solid var(--border-soft);border-radius:14px;overflow:hidden;background:#ffffff;">
+          <div id="brandingEmailPreviewHeader" style="padding:16px;background:linear-gradient(135deg,#0f4c81,#188fa7);color:#ffffff;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
+            <div style="display:flex;align-items:center;gap:0.65rem;">
+              <span id="brandingEmailPreviewMonogram" style="display:inline-flex;width:34px;height:34px;border-radius:999px;background:rgba(255,255,255,0.24);align-items:center;justify-content:center;font-weight:700;font-size:12px;letter-spacing:0.6px;">ES</span>
+              <div style="display:flex;flex-direction:column;line-height:1.2;">
+                <strong id="brandingEmailPreviewCompany" style="font-size:13px;">Sua empresa</strong>
+                <span id="brandingEmailPreviewType" style="font-size:11px;opacity:0.9;">Negocio de servicos</span>
+              </div>
+            </div>
+            <span style="font-size:11px;opacity:0.95;">Email de confirmacao</span>
+          </div>
+          <div style="padding:12px 16px;background:#f8fafc;color:#4b5563;font-size:12px;">
+            O gradiente acima sera usado no e-mail enviado para cliente e profissional.
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-fields">
+        <label for="brandingWhatsappPreviewHeader">Preview da mensagem de WhatsApp</label>
+        <div style="border:1px solid var(--border-soft);border-radius:14px;overflow:hidden;background:#ffffff;">
+          <div id="brandingWhatsappPreviewHeader" style="padding:12px 16px;background:linear-gradient(135deg,#0f4c81,#188fa7);color:#ffffff;font-size:12px;font-weight:600;">
+            WhatsApp de confirmacao
+          </div>
+          <div style="padding:14px;background:#f4fbf7;display:grid;gap:10px;">
+            <pre id="brandingWhatsappPreviewCustomer" style="margin:0;padding:10px 12px;background:#dcf8c6;border-radius:12px;border:1px solid #b8e6a1;white-space:pre-wrap;font-size:12px;line-height:1.35;color:#1f2937;font-family:Consolas,'Courier New',monospace;">Sua empresa | Confirmacao de agendamento
+Segmento: Negocio de servicos
+Servico: Corte completo
+Profissional: Rafael
+Data: 12/05/2026
+Hora: 10:00
+Status: Pendente
+Nos vemos em breve!</pre>
+            <pre id="brandingWhatsappPreviewProfessional" style="margin:0;padding:10px 12px;background:#ffffff;border-radius:12px;border:1px solid #d6e2d2;white-space:pre-wrap;font-size:12px;line-height:1.35;color:#1f2937;font-family:Consolas,'Courier New',monospace;">Sua empresa | Novo agendamento recebido
+Segmento: Negocio de servicos
+Cliente: Joao Cliente
+Servico: Corte completo
+Data: 12/05/2026
+Hora: 10:00
+Status: Pendente
+Acesse a agenda para acompanhar os detalhes.</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-fields">
         <p style="color: var(--text-2); margin: 0 0 1rem 0; font-size: 0.9rem;">
           <strong style="display: block; margin-bottom: 0.75rem;">Escolha o plano para começar:</strong>
         </p>
