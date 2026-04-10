@@ -1,6 +1,8 @@
 import os
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.db import IntegrityError
+from django.db.models import Q
 
 
 class Command(BaseCommand):
@@ -9,7 +11,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         User = get_user_model()
 
-        email = os.environ.get("DJANGO_SUPERUSER_EMAIL")
+        email = (os.environ.get("DJANGO_SUPERUSER_EMAIL") or "").strip().lower()
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME", "").strip() or email
         password = os.environ.get("DJANGO_SUPERUSER_PASSWORD")
         reset_password = os.environ.get("DJANGO_SUPERUSER_RESET_PASSWORD", "").strip().lower() in {
@@ -25,9 +27,13 @@ class Command(BaseCommand):
             ))
             return
 
-        existing = User.objects.filter(email=email).first()
+        existing = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=username)).order_by("id").first()
         if existing:
             changed_fields = []
+
+            if existing.email != email:
+                existing.email = email
+                changed_fields.append("email")
 
             if not existing.is_staff:
                 existing.is_staff = True
@@ -56,5 +62,34 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Superusuário '{email}' já existe. Nenhuma ação."))
             return
 
-        User.objects.create_superuser(username=username, email=email, password=password)
-        self.stdout.write(self.style.SUCCESS(f"Superusuário '{email}' criado com sucesso!"))
+        try:
+            User.objects.create_superuser(username=username, email=email, password=password)
+            self.stdout.write(self.style.SUCCESS(f"Superusuário '{email}' criado com sucesso!"))
+        except IntegrityError:
+            conflicted = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=username)).order_by("id").first()
+            if not conflicted:
+                raise
+
+            changed_fields = []
+            if conflicted.email != email:
+                conflicted.email = email
+                changed_fields.append("email")
+            if not conflicted.is_staff:
+                conflicted.is_staff = True
+                changed_fields.append("is_staff")
+            if not conflicted.is_superuser:
+                conflicted.is_superuser = True
+                changed_fields.append("is_superuser")
+            if reset_password:
+                conflicted.set_password(password)
+                changed_fields.append("password")
+
+            if changed_fields:
+                conflicted.save(update_fields=changed_fields)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Superusuário '{email}' ajustado após conflito ({', '.join(changed_fields)})."
+                    )
+                )
+            else:
+                self.stdout.write(self.style.SUCCESS(f"Superusuário '{email}' já existe. Nenhuma ação."))
