@@ -9,7 +9,7 @@
   <div class="client-company-shell">
     <header class="client-company-hero">
       <div>
-        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">Voltar para a empresa</a>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.portal_token %}">Voltar para a empresa</a>
         <p class="client-eyebrow">Checkout do cliente</p>
         <h1>{% if checkout_kind == "plano" %}Pague seu pacote mensal{% else %}Pague seu horario pelo aplicativo{% endif %}</h1>
         <p class="client-subtitle">
@@ -123,7 +123,7 @@
             {% endif %}
           </p>
           <div class="client-success-actions">
-            <a class="btn-success" href="{% url 'cliente_empresa' empresa.id %}">Voltar para a empresa</a>
+            <a class="btn-success" href="{% url 'cliente_empresa' empresa.portal_token %}">Voltar para a empresa</a>
           </div>
         </div>
         {% else %}

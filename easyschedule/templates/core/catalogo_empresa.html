@@ -9,7 +9,7 @@
   <div class="client-company-shell">
     <header class="client-company-hero">
       <div>
-        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">Voltar para agendamento</a>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.portal_token %}">Voltar para agendamento</a>
         <p class="client-eyebrow">Catalogo da empresa</p>
         <h1>{{ empresa.nome }}</h1>
         <p class="client-subtitle">
@@ -70,8 +70,8 @@
     <section class="client-panel" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between;">
       <p class="client-subtitle" style="margin: 0;">Pronto para reservar? Escolha seu horario ou confira os produtos da empresa.</p>
       <div style="display: flex; flex-wrap: wrap; gap: 0.65rem;">
-        <a class="btn-secondary" href="{% url 'cliente_empresa' empresa.id %}" style="text-decoration: none;">Ir para agendamento</a>
-        <a class="btn-success" href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: none;">Ver produtos da empresa</a>
+        <a class="btn-secondary" href="{% url 'cliente_empresa' empresa.portal_token %}" style="text-decoration: none;">Ir para agendamento</a>
+        <a class="btn-success" href="{% url 'loja_produtos' empresa.portal_token %}" style="text-decoration: none;">Ver produtos da empresa</a>
       </div>
     </section>
   </div>

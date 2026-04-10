@@ -5,12 +5,12 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
 
-<section class="client-company-page" data-slots-url="{% url 'cliente_horarios' empresa.id %}">
+<section class="client-company-page" data-slots-url="{% url 'cliente_horarios' empresa.portal_token %}">
   <div class="client-company-shell">
     <!-- Header da Loja -->
     <header class="client-company-hero">
       <div>
-        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">← Volta para {{ profile.appointment_term_plural }}</a>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.portal_token %}">← Volta para {{ profile.appointment_term_plural }}</a>
         <p class="client-eyebrow">🏪 Loja de Produtos</p>
         <h1>Confira nossos produtos</h1>
         <p class="client-subtitle">
@@ -50,7 +50,7 @@
       
       {% if busca or categoria_selecionada %}
       <p style="margin-top: 0.75rem; text-align: right;">
-        <a href="{% url 'loja_produtos' empresa.id %}" style="color: var(--accent); text-decoration: underline; font-weight: 600;">Limpar filtros</a>
+        <a href="{% url 'loja_produtos' empresa.portal_token %}" style="color: var(--accent); text-decoration: underline; font-weight: 600;">Limpar filtros</a>
       </p>
       {% endif %}
     </section>
@@ -109,7 +109,7 @@
     <section class="client-panel">
       <p style="text-align: center; color: var(--text-2); padding: 2rem 1rem;">
         Nenhum produto encontrado.
-        <a href="{% url 'loja_produtos' empresa.id %}" style="color: var(--accent); text-decoration: underline; display: block; margin-top: 0.5rem;">Ver todos os produtos</a>
+        <a href="{% url 'loja_produtos' empresa.portal_token %}" style="color: var(--accent); text-decoration: underline; display: block; margin-top: 0.5rem;">Ver todos os produtos</a>
       </p>
     </section>
     {% endif %}
@@ -133,7 +133,7 @@
             <strong style="color: var(--accent); font-size: 1.2rem; display: block; margin-top: 0.25rem;">R$ <span id="carrinho-total">0.00</span></strong>
           </div>
           <div style="display: flex; gap: 0.75rem;">
-            <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.7rem 1.2rem; text-decoration: none;">Mais itens</a>
+            <a href="{% url 'loja_produtos' empresa.portal_token %}" class="btn-success" style="padding: 0.7rem 1.2rem; text-decoration: none;">Mais itens</a>
             <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.7rem 1.2rem; background: var(--danger);">Limpar</button>
           </div>
         </div>
@@ -146,7 +146,7 @@
 
     <!-- Botão de Continuar -->
     <section class="client-panel" style="text-align: center; background: var(--accent-soft); border: 1px solid var(--border-strong);">
-      <a href="{% url 'cliente_empresa' empresa.id %}" class="btn-success" style="display: inline-block; padding: 0.9rem 2rem; text-decoration: none;">
+      <a href="{% url 'cliente_empresa' empresa.portal_token %}" class="btn-success" style="display: inline-block; padding: 0.9rem 2rem; text-decoration: none;">
         ✓ Voltar para agendamento
       </a>
     </section>
@@ -154,12 +154,12 @@
 </section>
 
 <script>
-const empresa_id = {{ empresa.id }};
+const empresa_token = '{{ empresa.portal_token }}';
 const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
                   document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
 
 function atualizarCarrinho() {
-  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+  fetch(`/cliente/empresa/${empresa_token}/api/carrinho/listar/`)
     .then(r => r.json())
     .then(data => {
       const carrinhoSection = document.getElementById('carrinho-section');
@@ -202,11 +202,11 @@ function atualizarCarrinho() {
 
 window.limparCarrinho = function() {
   if (confirm('Tem certeza que deseja limpar o carrinho?')) {
-    fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+    fetch(`/cliente/empresa/${empresa_token}/api/carrinho/listar/`)
       .then(r => r.json())
       .then(data => {
         let promises = data.itens.map(item =>
-          fetch(`/cliente/empresa/${empresa_id}/api/carrinho/remover/`, {
+          fetch(`/cliente/empresa/${empresa_token}/api/carrinho/remover/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -232,7 +232,7 @@ document.querySelectorAll('.btn-add-carrinho').forEach(btn => {
     this.textContent = '⏳ Adicionando...';
     
     try {
-      const response = await fetch(`/cliente/empresa/${empresa_id}/api/carrinho/adicionar/`, {
+      const response = await fetch(`/cliente/empresa/${empresa_token}/api/carrinho/adicionar/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

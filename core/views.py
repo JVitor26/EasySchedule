@@ -51,15 +51,19 @@ def home(request):
         template = "home.html"
         context = {}
     else:
-        empresa_id = (request.GET.get("empresa") or "").strip()
-        if empresa_id.isdigit():
-            empresa = Empresa.objects.filter(pk=int(empresa_id)).first()
+        portal_token = (request.GET.get("token") or "").strip()
+        if portal_token:
+            empresa = Empresa.objects.filter(portal_token=portal_token).first()
             if empresa:
-                return redirect("cliente_empresa", empresa_id=empresa.id)
+                return redirect("cliente_empresa", portal_token=empresa.portal_token)
 
         template = "core/cliente_publico.html"
         context = {}
     return render(request, template, context)
+
+
+def _get_portal_empresa_or_404(portal_token):
+    return get_object_or_404(Empresa, portal_token=portal_token)
 
 
 def login_redirect(request):
@@ -354,8 +358,8 @@ def _can_client_change_appointment(agendamento):
     return agendamento.status not in ("cancelado", "finalizado") and agendamento.data >= hoje
 
 
-def empresa_catalogo(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def empresa_catalogo(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -372,8 +376,8 @@ def empresa_catalogo(request, empresa_id):
     return render(request, "core/catalogo_empresa.html", context)
 
 
-def loja_produtos(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def loja_produtos(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -411,8 +415,8 @@ def loja_produtos(request, empresa_id):
 
 
 @require_http_methods(["GET"])
-def api_carrinho_listar(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def api_carrinho_listar(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -429,8 +433,8 @@ def api_carrinho_listar(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def api_carrinho_adicionar(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def api_carrinho_adicionar(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -483,8 +487,8 @@ def api_carrinho_adicionar(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def api_carrinho_remover(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def api_carrinho_remover(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -516,8 +520,8 @@ def api_carrinho_remover(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def api_carrinho_atualizar(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def api_carrinho_atualizar(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -562,8 +566,8 @@ def api_carrinho_atualizar(request, empresa_id):
     })
 
 
-def empresa_detail(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def empresa_detail(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -648,11 +652,17 @@ def password_recovery_request(request):
         messages.warning(request, "Voce ja esta autenticado. Use o menu da conta para trocar sua senha.")
         return redirect("dashboard_home")
 
-    empresa_id = request.GET.get("empresa")
-    if empresa_id and empresa_id.isdigit():
+    empresa_token = (request.GET.get("empresa_token") or "").strip()
+    empresa_id = (request.GET.get("empresa") or "").strip()
+
+    empresa = None
+    if empresa_token:
+        empresa = Empresa.objects.filter(portal_token=empresa_token).first()
+    elif empresa_id.isdigit():
         empresa = Empresa.objects.filter(pk=int(empresa_id)).first()
-        if empresa:
-            initial["empresa"] = empresa
+
+    if empresa:
+        initial["empresa"] = empresa
 
     if request.method == "POST":
         form = PasswordRecoveryRequestForm(request.POST)
@@ -746,7 +756,7 @@ def password_recovery_confirm(request):
                     recovery.cliente.save(update_fields=["portal_password", "portal_password_updated_at"])
                     _set_portal_cliente(request, recovery.empresa_id, recovery.cliente_id)
                     messages.success(request, "Senha do portal atualizada com sucesso.")
-                    redirect_target = redirect("cliente_empresa", empresa_id=recovery.empresa_id)
+                    redirect_target = redirect("cliente_empresa", portal_token=recovery.empresa.portal_token)
                 else:
                     form.add_error(None, "Nao foi possivel concluir a recuperacao desta conta.")
                     redirect_target = None
@@ -766,8 +776,8 @@ def password_recovery_confirm(request):
     })
 
 
-def available_slots_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def available_slots_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -844,8 +854,8 @@ def available_slots_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def slot_hold_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def slot_hold_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -950,8 +960,8 @@ def slot_hold_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def portal_enviar_otp_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def portal_enviar_otp_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -1010,8 +1020,8 @@ def portal_enviar_otp_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def portal_validar_otp_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def portal_validar_otp_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -1048,8 +1058,8 @@ def portal_validar_otp_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def portal_password_login_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def portal_password_login_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -1093,14 +1103,15 @@ def portal_password_login_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def portal_logout_api(request, empresa_id):
-    _clear_portal_cliente(request, empresa_id)
+def portal_logout_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    _clear_portal_cliente(request, empresa.id)
     return JsonResponse({"status": "sucesso"})
 
 
 @require_http_methods(["POST"])
-def cliente_agendamentos_api(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def cliente_agendamentos_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -1165,8 +1176,8 @@ def cliente_agendamentos_api(request, empresa_id):
 
 
 @require_http_methods(["POST"])
-def cliente_agendamento_cancelar_api(request, empresa_id, agendamento_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def cliente_agendamento_cancelar_api(request, portal_token, agendamento_id):
+    empresa = _get_portal_empresa_or_404(portal_token)
     cliente = _get_portal_cliente(request, empresa)
     if not cliente:
         return JsonResponse({"status": "erro", "message": "Faça login no portal para cancelar."}, status=401)
@@ -1182,8 +1193,8 @@ def cliente_agendamento_cancelar_api(request, empresa_id, agendamento_id):
 
 
 @require_http_methods(["POST"])
-def cliente_agendamento_remarcar_api(request, empresa_id, agendamento_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def cliente_agendamento_remarcar_api(request, portal_token, agendamento_id):
+    empresa = _get_portal_empresa_or_404(portal_token)
     cliente = _get_portal_cliente(request, empresa)
     if not cliente:
         return JsonResponse({"status": "erro", "message": "Faça login no portal para remarcar."}, status=401)
@@ -1228,8 +1239,8 @@ def cliente_agendamento_remarcar_api(request, empresa_id, agendamento_id):
     })
 
 
-def cliente_minha_conta(request, empresa_id):
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
+def cliente_minha_conta(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
     access_denied = _enforce_company_portal_access(request, empresa)
     if access_denied:
         return access_denied
@@ -1237,7 +1248,7 @@ def cliente_minha_conta(request, empresa_id):
     cliente = _get_portal_cliente(request, empresa)
     if not cliente:
         messages.warning(request, "Faça login no portal do cliente para acessar sua conta.")
-        return redirect("cliente_empresa", empresa_id=empresa.id)
+        return redirect("cliente_empresa", portal_token=empresa.portal_token)
 
     pref, _ = ClientePortalPreferencia.objects.get_or_create(empresa=empresa, cliente=cliente)
 

@@ -118,6 +118,71 @@
             flex-grow: 1;
         }
 
+        .client-login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .client-login-form label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-2, #4b5563);
+            margin-bottom: 0.2rem;
+        }
+
+        .client-login-form input {
+            width: 100%;
+            border: 1px solid var(--border-soft, #d1d5db);
+            border-radius: 8px;
+            padding: 0.75rem 0.85rem;
+            font-size: 0.95rem;
+            background: white;
+            color: var(--text-1, #111827);
+        }
+
+        .client-login-form input:focus {
+            outline: none;
+            border-color: var(--accent, #22c55e);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16);
+        }
+
+        .client-login-feedback {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--text-2, #6b7280);
+        }
+
+        .client-login-feedback.is-error {
+            color: #dc2626;
+        }
+
+        .client-login-feedback.is-success {
+            color: #15803d;
+        }
+
+        .client-login-feedback.is-loading {
+            color: #2563eb;
+        }
+
+        .client-login-links {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .client-login-links a {
+            color: var(--accent, #22c55e);
+            text-decoration: none;
+            font-size: 0.86rem;
+            font-weight: 600;
+        }
+
+        .client-login-links a:hover {
+            text-decoration: underline;
+        }
+
         .btn-success {
             display: inline-block;
             background: var(--accent, #22c55e);
@@ -198,13 +263,14 @@
     <!-- Navigation -->
     <nav class="client-public-nav">
         <a href="#acesso">Acesso por link</a>
+        <a href="#login-cliente">Login cliente</a>
         <a href="{% url 'login' %}">Já tenho conta</a>
         <a href="{% url 'cadastro_empresa' %}">Sou empresa</a>
     </nav>
 
     <!-- Main Content -->
     <main class="client-companies-container" id="acesso">
-        <div class="client-company-grid" style="grid-template-columns: minmax(320px, 680px); justify-content: center;">
+        <div class="client-company-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 520px)); justify-content: center;">
             <article class="client-company-card" style="cursor: default;">
                 <span class="company-pill">Acesso privado</span>
                 <h2>Use o link da empresa</h2>
@@ -213,8 +279,61 @@
                     Solicite o link de agendamento diretamente ao profissional ou ao administrador da empresa.
                 </p>
                 <p style="margin-bottom: 0; color: var(--text-2); font-size: 0.9rem;">
-                    Exemplo de link: <strong>/cliente/empresa/123/</strong>
+                    Exemplo de link: <strong>/cliente/empresa/5f4a2f66-4120-4d8a-8b8e-ec5c11f4af13/</strong>
                 </p>
+            </article>
+
+            <article class="client-company-card" style="cursor: default;" id="login-cliente">
+                <span class="company-pill">Login cliente</span>
+                <h2>Entrar para ver meus agendamentos</h2>
+                <p>
+                    Depois do cadastro pelo link da empresa, entre com seu email ou WhatsApp e senha para acessar seus agendamentos.
+                </p>
+
+                <form id="clienteLoginForm" class="client-login-form" novalidate>
+                    <div>
+                        <label for="empresaLinkInput">Link da empresa ou token de acesso</label>
+                        <input
+                            id="empresaLinkInput"
+                            name="empresa_link"
+                            type="text"
+                            placeholder="Cole o link recebido (ex.: /cliente/empresa/uuid/)"
+                            autocomplete="off"
+                            required
+                        >
+                    </div>
+
+                    <div>
+                        <label for="clienteIdentifierInput">Email ou WhatsApp cadastrado</label>
+                        <input
+                            id="clienteIdentifierInput"
+                            name="identifier"
+                            type="text"
+                            placeholder="cliente@email.com ou (65) 99999-9999"
+                            autocomplete="username"
+                            required
+                        >
+                    </div>
+
+                    <div>
+                        <label for="clientePasswordInput">Senha do portal</label>
+                        <input
+                            id="clientePasswordInput"
+                            name="password"
+                            type="password"
+                            placeholder="Sua senha"
+                            autocomplete="current-password"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="btn-success">Entrar no portal da empresa</button>
+
+                    <div class="client-login-links">
+                        <a id="clienteRecoveryLink" href="#">Esqueci minha senha</a>
+                    </div>
+                    <p id="clienteLoginFeedback" class="client-login-feedback">Informe seu link da empresa para liberar o login.</p>
+                </form>
             </article>
         </div>
     </main>
@@ -223,5 +342,148 @@
     <footer class="client-footer">
         <p>© 2026 EasySchedule. Todos os direitos reservados. | <a href="#">Privacidade</a> | <a href="#">Termos de Serviço</a></p>
     </footer>
+
+    <script>
+        (function () {
+            const form = document.getElementById('clienteLoginForm');
+            const linkInput = document.getElementById('empresaLinkInput');
+            const identifierInput = document.getElementById('clienteIdentifierInput');
+            const passwordInput = document.getElementById('clientePasswordInput');
+            const feedback = document.getElementById('clienteLoginFeedback');
+            const recoveryLink = document.getElementById('clienteRecoveryLink');
+
+            if (!form || !linkInput || !identifierInput || !passwordInput || !feedback || !recoveryLink) {
+                return;
+            }
+
+            const uuidRegex = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+
+            function getCsrfToken() {
+                const fromInput = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+                if (fromInput) {
+                    return fromInput;
+                }
+
+                const cookie = document.cookie
+                    .split(';')
+                    .map((item) => item.trim())
+                    .find((item) => item.startsWith('csrftoken='));
+
+                return cookie ? cookie.split('=')[1] : '';
+            }
+
+            function setFeedback(message, state) {
+                feedback.textContent = message;
+                feedback.classList.remove('is-error', 'is-success', 'is-loading');
+                if (state) {
+                    feedback.classList.add(state);
+                }
+            }
+
+            function extractPortalToken(rawValue) {
+                const value = (rawValue || '').trim();
+                if (!value) {
+                    return '';
+                }
+
+                const directMatch = value.match(uuidRegex);
+                if (directMatch) {
+                    return directMatch[0].toLowerCase();
+                }
+
+                try {
+                    const parsedUrl = new URL(value);
+                    const tokenParam = parsedUrl.searchParams.get('token');
+                    if (tokenParam && uuidRegex.test(tokenParam)) {
+                        return tokenParam.toLowerCase();
+                    }
+
+                    const pathMatch = parsedUrl.pathname.match(uuidRegex);
+                    if (pathMatch) {
+                        return pathMatch[0].toLowerCase();
+                    }
+                } catch (_error) {
+                    return '';
+                }
+
+                return '';
+            }
+
+            function syncRecoveryLink() {
+                const token = extractPortalToken(linkInput.value);
+                if (!token) {
+                    recoveryLink.href = '#';
+                    recoveryLink.setAttribute('aria-disabled', 'true');
+                    return;
+                }
+
+                recoveryLink.href = `/accounts/recuperar-senha/?tipo=cliente&empresa_token=${token}`;
+                recoveryLink.removeAttribute('aria-disabled');
+            }
+
+            async function parseApiResponse(response) {
+                const bodyText = await response.text();
+                if (!bodyText) {
+                    return {};
+                }
+
+                try {
+                    return JSON.parse(bodyText);
+                } catch (_error) {
+                    return {};
+                }
+            }
+
+            const queryToken = new URLSearchParams(window.location.search).get('token');
+            if (queryToken && uuidRegex.test(queryToken)) {
+                linkInput.value = queryToken;
+            }
+
+            syncRecoveryLink();
+
+            linkInput.addEventListener('input', syncRecoveryLink);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                const token = extractPortalToken(linkInput.value);
+                const identifier = identifierInput.value.trim();
+                const password = passwordInput.value;
+
+                if (!token) {
+                    setFeedback('Informe um link valido da empresa para continuar.', 'is-error');
+                    return;
+                }
+
+                if (!identifier || !password) {
+                    setFeedback('Preencha email/WhatsApp e senha para entrar.', 'is-error');
+                    return;
+                }
+
+                setFeedback('Validando login do cliente...', 'is-loading');
+
+                try {
+                    const response = await fetch(`/cliente/empresa/${token}/api/portal/login-senha/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken(),
+                        },
+                        body: JSON.stringify({ identifier, password }),
+                    });
+
+                    const payload = await parseApiResponse(response);
+                    if (!response.ok || payload.status !== 'sucesso') {
+                        throw new Error(payload.message || 'Nao foi possivel fazer login com estes dados.');
+                    }
+
+                    setFeedback('Login realizado com sucesso. Abrindo seus agendamentos...', 'is-success');
+                    window.location.href = `/cliente/empresa/${token}/#meus-agendamentos`;
+                } catch (error) {
+                    setFeedback(error.message || 'Falha ao entrar no portal.', 'is-error');
+                }
+            });
+        })();
+    </script>
 </body>
 </html>

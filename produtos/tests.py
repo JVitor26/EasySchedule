@@ -79,8 +79,9 @@ class ProdutoFlowTests(TestCase):
             destaque_publico=True,
         )
 
-        response = self.client.get(reverse("cliente_empresa", args=[self.empresa.pk]))
+        response = self.client.get(reverse("cliente_empresa", args=[self.empresa.portal_token]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Produtos da empresa")
         self.assertContains(response, "Shampoo Premium")
+

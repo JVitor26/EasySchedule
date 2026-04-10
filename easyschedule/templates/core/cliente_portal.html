@@ -30,7 +30,7 @@
       <span class="company-pill">{{ empresa.business_profile.label }}</span>
       <h2>{{ empresa.nome }}</h2>
       <p>Gerenciar seus agendamentos, pacotes mensais e informativos sobre {{ empresa.business_profile.professional_term_plural|lower }} disponíveis.</p>
-      <a class="btn-success" href="{% url 'cliente_empresa' empresa.id %}">Acessar portal</a>
+      <a class="btn-success" href="{% url 'cliente_empresa' empresa.portal_token %}">Acessar portal</a>
     </article>
     {% empty %}
     <div class="client-empty">

@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 import re
+import uuid
 from .business_profiles import get_business_profile, normalize_business_type
 
 
@@ -42,6 +43,7 @@ class Empresa(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)],
         help_text="Limite comercial de profissionais ativos para esta empresa.",
     )
+    portal_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     data_cadastro = models.DateTimeField(auto_now_add=True)
     usuario = models.OneToOneField('auth.User', on_delete=models.CASCADE, related_name='empresa')
 

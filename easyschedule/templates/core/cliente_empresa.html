@@ -7,13 +7,13 @@
 
 <section
   class="client-company-page"
-  data-slots-url="{% url 'cliente_horarios' empresa.id %}"
-  data-slot-hold-url="{% url 'cliente_slot_hold_api' empresa.id %}"
+  data-slots-url="{% url 'cliente_horarios' empresa.portal_token %}"
+  data-slot-hold-url="{% url 'cliente_slot_hold_api' empresa.portal_token %}"
 >
   <div class="client-company-shell">
     <header class="client-company-hero">
       <div>
-        <a class="back-link" href="{% url 'cliente_catalogo' empresa.id %}">Ver catalogo completo da empresa</a>
+        <a class="back-link" href="{% url 'cliente_catalogo' empresa.portal_token %}">Ver catalogo completo da empresa</a>
         <p class="client-eyebrow">{{ profile.label }}</p>
         <h1>{{ empresa.nome }}</h1>
         <p class="client-subtitle">
@@ -25,7 +25,7 @@
         <span class="preview-chip">{{ profile.client_term_plural }}</span>
         <span class="preview-chip">{{ profile.service_term_plural }}</span>
         <span class="preview-chip">{{ profile.appointment_term_plural }}</span>
-        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; text-decoration: none;">Ver todos os produtos</a>
+        <a href="{% url 'loja_produtos' empresa.portal_token %}" class="btn-success" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; text-decoration: none;">Ver todos os produtos</a>
       </div>
     </header>
 
@@ -106,7 +106,7 @@
           <h2>Produtos da empresa</h2>
           <p>Confira alguns itens disponiveis para venda pela empresa no mesmo portal.</p>
         </div>
-        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
+        <a href="{% url 'loja_produtos' empresa.portal_token %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
           Ver todos os produtos ({{ produtos_total }})
         </a>
       </div>
@@ -155,7 +155,7 @@
           <strong>Total de produtos:</strong> R$ <span id="carrinho-total">0.00</span>
         </p>
         <div style="margin-top: 1rem;">
-          <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block; text-decoration: none;">
+          <a href="{% url 'loja_produtos' empresa.portal_token %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block; text-decoration: none;">
             Adicionar mais produtos
           </a>
           <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.5rem 1rem; background: #ef4444;">
@@ -165,7 +165,7 @@
       </div>
 
       <p id="carrinho-vazio" style="color: var(--text-2); text-align: center; padding: 1rem;">
-        Nenhum produto no carrinho. <a href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: underline;">Ver produtos</a>
+        Nenhum produto no carrinho. <a href="{% url 'loja_produtos' empresa.portal_token %}" style="text-decoration: underline;">Ver produtos</a>
       </p>
     </section>
 
@@ -307,7 +307,7 @@
           </div>
         </div>
         <div class="auth-footer" style="justify-content: flex-end; margin-top: 0;">
-          <a href="{% url 'password_recovery_request' %}?tipo=cliente&empresa={{ empresa.id }}">Esqueci minha senha</a>
+          <a href="{% url 'password_recovery_request' %}?tipo=cliente&empresa_token={{ empresa.portal_token }}">Esqueci minha senha</a>
         </div>
       </form>
 
@@ -349,7 +349,7 @@
       </form>
 
       <div id="portalActions" class="client-success-actions" style="display:none;">
-        <a class="btn-success" href="{% url 'cliente_minha_conta' empresa.id %}">Minha Conta</a>
+        <a class="btn-success" href="{% url 'cliente_minha_conta' empresa.portal_token %}">Minha Conta</a>
         <button type="button" id="portalLogoutBtn" class="btn-secondary">Sair do portal</button>
       </div>
 
@@ -362,13 +362,13 @@
 <script src="{% static 'js/client_portal.js' %}"></script>
 
 <script>
-const empresa_id = {{ empresa.id }};
+const empresa_token = '{{ empresa.portal_token }}';
 const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
                   document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
 
 // Carregar carrinho ao abrir a página
 function carregarCarrinho() {
-  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+  fetch(`/cliente/empresa/${empresa_token}/api/carrinho/listar/`)
     .then(r => r.json())
     .then(data => {
       const carrinhoSection = document.getElementById('carrinho-section');
@@ -414,11 +414,11 @@ function carregarCarrinho() {
 // Limpar carrinho
 window.limparCarrinho = function() {
   if (confirm('Tem certeza que deseja limpar o carrinho?')) {
-    fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
+    fetch(`/cliente/empresa/${empresa_token}/api/carrinho/listar/`)
       .then(r => r.json())
       .then(data => {
         let promises = data.itens.map(item =>
-          fetch(`/cliente/empresa/${empresa_id}/api/carrinho/remover/`, {
+          fetch(`/cliente/empresa/${empresa_token}/api/carrinho/remover/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -478,7 +478,7 @@ async function carregarMeusAgendamentos() {
   trackResults.style.display = 'none';
   trackResults.innerHTML = '';
 
-  const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/`, {
+  const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -509,7 +509,7 @@ portalPasswordForm?.addEventListener('submit', async (event) => {
   setTrackFeedback('Validando sua senha do portal...', 'is-loading');
 
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/login-senha/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/portal/login-senha/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -534,7 +534,7 @@ portalPasswordForm?.addEventListener('submit', async (event) => {
 window.cancelarAgendamento = async function(agendamentoId) {
   if (!confirm('Deseja realmente cancelar este agendamento?')) return;
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/${agendamentoId}/cancelar/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/${agendamentoId}/cancelar/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -559,7 +559,7 @@ window.remarcarAgendamento = async function(agendamentoId, dataAtual, horaAtual)
   if (!novaHora) return;
 
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_id}/api/agendamentos/${agendamentoId}/remarcar/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/${agendamentoId}/remarcar/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -586,7 +586,7 @@ otpStartForm?.addEventListener('submit', async (event) => {
   setTrackFeedback('Enviando codigo de acesso...', 'is-loading');
 
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/enviar-otp/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/portal/enviar-otp/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -622,7 +622,7 @@ otpValidateForm?.addEventListener('submit', async (event) => {
   setTrackFeedback('Validando codigo...', 'is-loading');
 
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_id}/api/portal/validar-otp/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/portal/validar-otp/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -644,7 +644,7 @@ otpValidateForm?.addEventListener('submit', async (event) => {
 });
 
 portalLogoutBtn?.addEventListener('click', async () => {
-  await fetch(`/cliente/empresa/${empresa_id}/api/portal/logout/`, {
+  await fetch(`/cliente/empresa/${empresa_token}/api/portal/logout/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

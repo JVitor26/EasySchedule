@@ -129,7 +129,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_api_publica_retorna_apenas_horarios_disponiveis(self):
         response = self.client.get(
-            reverse("cliente_horarios", args=[self.empresa.pk]),
+            reverse("cliente_horarios", args=[self.empresa.portal_token]),
             {
                 "servico": self.servico.pk,
                 "profissional": self.profissional.pk,
@@ -147,7 +147,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_consegue_cadastrar_e_agendar(self):
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Joao Cliente",
                 "email": "joao@example.com",
@@ -183,7 +183,7 @@ class PublicCustomerBookingTests(TestCase):
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_cliente_publico_recebe_confirmacao_por_email_para_cliente_e_profissional(self):
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Joao Cliente",
                 "email": "joao@example.com",
@@ -241,7 +241,7 @@ class PublicCustomerBookingTests(TestCase):
         month_reference = self._next_month_reference()
 
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Cliente Pacote",
                 "email": "pacote@example.com",
@@ -304,7 +304,7 @@ class PublicCustomerBookingTests(TestCase):
         self.empresa.save(update_fields=["logo_url", "cor_primaria", "cor_secundaria"])
 
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Joao Cliente",
                 "email": "joao@example.com",
@@ -338,7 +338,7 @@ class PublicCustomerBookingTests(TestCase):
 
         with patch("core.notifications._send_whatsapp") as whatsapp_mock, patch("core.notifications._send_email"):
             response = self.client.post(
-                reverse("cliente_empresa", args=[self.empresa.pk]),
+                reverse("cliente_empresa", args=[self.empresa.portal_token]),
                 {
                     "nome": "Joao Cliente",
                     "email": "joao@example.com",
@@ -379,7 +379,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_api_hold_reserva_horario_temporariamente(self):
         response = self.client.post(
-            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            reverse("cliente_slot_hold_api", args=[self.empresa.portal_token]),
             data=json.dumps({
                 "servico": self.servico.pk,
                 "profissional": self.profissional.pk,
@@ -396,7 +396,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_hold_bloqueia_horario_para_outra_sessao(self):
         hold_response = self.client.post(
-            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            reverse("cliente_slot_hold_api", args=[self.empresa.portal_token]),
             data=json.dumps({
                 "servico": self.servico.pk,
                 "profissional": self.profissional.pk,
@@ -409,7 +409,7 @@ class PublicCustomerBookingTests(TestCase):
 
         other_client = Client()
         slots_response = other_client.get(
-            reverse("cliente_horarios", args=[self.empresa.pk]),
+            reverse("cliente_horarios", args=[self.empresa.portal_token]),
             {
                 "servico": self.servico.pk,
                 "profissional": self.profissional.pk,
@@ -423,7 +423,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_consome_hold_ao_agendar(self):
         hold_response = self.client.post(
-            reverse("cliente_slot_hold_api", args=[self.empresa.pk]),
+            reverse("cliente_slot_hold_api", args=[self.empresa.portal_token]),
             data=json.dumps({
                 "servico": self.servico.pk,
                 "profissional": self.profissional.pk,
@@ -436,7 +436,7 @@ class PublicCustomerBookingTests(TestCase):
         hold_token = hold_response.json()["hold_token"]
 
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Cliente Hold",
                 "email": "hold@example.com",
@@ -460,7 +460,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_recebe_erro_quando_horario_esta_ocupado(self):
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Joao Cliente",
                 "email": "joao2@example.com",
@@ -488,7 +488,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_consegue_agendar_sem_email_documento_e_data_nascimento(self):
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Cliente Basico",
                 "email": "",
@@ -513,7 +513,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_cria_agendamento_com_pagamento_pendente(self):
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Ana Cliente",
                 "email": "ana@example.com",
@@ -543,7 +543,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_api_publica_retorna_horarios_fixos_para_pacote_mensal(self):
         response = self.client.get(
-            reverse("cliente_horarios", args=[self.empresa.pk]),
+            reverse("cliente_horarios", args=[self.empresa.portal_token]),
             {
                 "tipo_reserva": "pacote_mensal",
                 "servico": self.servico.pk,
@@ -564,7 +564,7 @@ class PublicCustomerBookingTests(TestCase):
         month_reference = self._next_month_reference()
 
         response = self.client.post(
-            reverse("cliente_empresa", args=[self.empresa.pk]),
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
             {
                 "nome": "Cliente Pacote",
                 "email": "pacote@example.com",
@@ -596,7 +596,7 @@ class PublicCustomerBookingTests(TestCase):
 
     def test_cliente_publico_adiciona_e_lista_produtos_no_carrinho_da_empresa(self):
         add_response = self.client.post(
-            reverse("api_carrinho_adicionar", args=[self.empresa.pk]),
+            reverse("api_carrinho_adicionar", args=[self.empresa.portal_token]),
             data=json.dumps({"produto_id": self.produto.pk, "quantidade": 2}),
             content_type="application/json",
         )
@@ -605,7 +605,7 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(add_response.json()["status"], "sucesso")
         self.assertEqual(add_response.json()["total_itens"], 2)
 
-        list_response = self.client.get(reverse("api_carrinho_listar", args=[self.empresa.pk]))
+        list_response = self.client.get(reverse("api_carrinho_listar", args=[self.empresa.portal_token]))
 
         self.assertEqual(list_response.status_code, 200)
         payload = list_response.json()
@@ -615,14 +615,14 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(payload["itens"][0]["produto_id"], self.produto.pk)
 
     def test_catalogo_da_empresa_exibe_servicos_e_profissionais(self):
-        response = self.client.get(reverse("cliente_catalogo", args=[self.empresa.pk]))
+        response = self.client.get(reverse("cliente_catalogo", args=[self.empresa.portal_token]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.servico.nome)
         self.assertContains(response, self.profissional.nome)
 
     def test_loja_da_empresa_exibe_produtos_ativos(self):
-        response = self.client.get(reverse("loja_produtos", args=[self.empresa.pk]))
+        response = self.client.get(reverse("loja_produtos", args=[self.empresa.portal_token]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.produto.nome)
@@ -723,7 +723,7 @@ class PasswordRecoveryTests(TestCase):
 
     def test_login_do_portal_com_senha(self):
         response = self.client.post(
-            reverse("portal_password_login_api", args=[self.empresa.pk]),
+            reverse("portal_password_login_api", args=[self.empresa.portal_token]),
             data=json.dumps({
                 "identifier": "cliente.portal@example.com",
                 "password": "senha-portal-antiga",
@@ -758,7 +758,7 @@ class PasswordRecoveryTests(TestCase):
             },
         )
 
-        self.assertRedirects(confirm_response, reverse("cliente_empresa", args=[self.empresa.pk]))
+        self.assertRedirects(confirm_response, reverse("cliente_empresa", args=[self.empresa.portal_token]))
         self.cliente.refresh_from_db()
         recovery.refresh_from_db()
 
@@ -857,3 +857,4 @@ class InfrastructureEndpointsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["X-Request-ID"], request_id)
+
