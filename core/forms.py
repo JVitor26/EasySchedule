@@ -1,4 +1,6 @@
 import re
+import json
+from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -16,6 +18,7 @@ from agendamentos.plans import (
 from empresas.business_profiles import get_business_profile
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
+from produtos.models import Produto
 from servicos.models import Servico
 from .notifications import notify_booking_created
 from empresas.models import Empresa
@@ -111,6 +114,8 @@ class PublicBookingForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
+    data_retirada_produtos = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
+    produtos_json = forms.CharField(required=False, widget=forms.HiddenInput())
     slot_hold_token = forms.CharField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, *args, empresa=None, session_key=None, **kwargs):
@@ -137,6 +142,7 @@ class PublicBookingForm(forms.Form):
         self.fields["hora"].label = "Horario disponivel"
         self.fields["observacoes"].label = profile["appointment_notes_label"]
         self.fields["observacoes"].widget.attrs["placeholder"] = profile["appointment_notes_placeholder"]
+        self.fields["data_retirada_produtos"].label = "Dia para retirada dos produtos (opcional)"
 
         if empresa is not None:
             self.fields["servico"].queryset = Servico.objects.filter(
@@ -294,6 +300,110 @@ class PublicBookingForm(forms.Form):
             raise forms.ValidationError("Selecione um horario disponivel.")
         return value
 
+    def clean_produtos_json(self):
+        raw = (self.cleaned_data.get("produtos_json") or "").strip()
+        if not raw:
+            return []
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise forms.ValidationError("Formato invalido para os produtos selecionados.") from exc
+
+        if not isinstance(payload, list):
+            raise forms.ValidationError("Formato invalido para os produtos selecionados.")
+
+        normalized = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+
+            try:
+                produto_id = int(item.get("produto_id"))
+                quantidade = int(item.get("quantidade", 0))
+            except (TypeError, ValueError):
+                continue
+
+            if produto_id <= 0 or quantidade <= 0:
+                continue
+
+            normalized.append({"produto_id": produto_id, "quantidade": quantidade})
+
+        return normalized
+
+    def clean_data_retirada_produtos(self):
+        data_retirada = self.cleaned_data.get("data_retirada_produtos")
+        if data_retirada and data_retirada < timezone.localdate():
+            raise forms.ValidationError("Escolha hoje ou uma data futura para retirada dos produtos.")
+        return data_retirada
+
+    def _resolve_selected_products(self, payload_items):
+        selected_products = []
+        product_errors = []
+        total_products_value = Decimal("0")
+
+        if not payload_items:
+            return selected_products, total_products_value, product_errors
+
+        produto_ids = [item["produto_id"] for item in payload_items]
+        produtos = {
+            produto.id: produto
+            for produto in Produto.objects.filter(empresa=self.empresa, ativo=True, pk__in=produto_ids)
+        }
+
+        for item in payload_items:
+            produto_id = item["produto_id"]
+            quantidade = item["quantidade"]
+            produto = produtos.get(produto_id)
+
+            if produto is None:
+                product_errors.append("Um dos produtos selecionados nao existe mais nesta empresa.")
+                continue
+
+            estoque_disponivel = max(int(produto.estoque_disponivel), 0)
+            if quantidade > estoque_disponivel:
+                product_errors.append(
+                    f"{produto.nome}: estoque insuficiente. Disponivel: {estoque_disponivel}."
+                )
+                continue
+
+            subtotal = produto.preco * quantidade
+            total_products_value += subtotal
+            selected_products.append({
+                "produto_id": produto.id,
+                "nome": produto.nome,
+                "quantidade": quantidade,
+                "preco_unitario": produto.preco,
+                "subtotal": subtotal,
+            })
+
+        return selected_products, total_products_value, product_errors
+
+    def _append_products_note_to_appointment(self, agendamento):
+        selected_products = self.cleaned_data.get("selected_products") or []
+        if not selected_products or agendamento is None:
+            return
+
+        retirada = self.cleaned_data.get("data_retirada_produtos")
+        retirada_label = retirada.strftime("%d/%m/%Y") if retirada else "Nao informada"
+        total_products_value = self.cleaned_data.get("selected_products_total") or Decimal("0")
+
+        products_summary = ", ".join(
+            f"{item['nome']} x{item['quantidade']}" for item in selected_products
+        )
+        note = (
+            f"[Produtos reservados no portal] Retirada: {retirada_label}. "
+            f"Itens: {products_summary}. "
+            f"Total produtos: R$ {total_products_value:.2f}."
+        )
+
+        if agendamento.observacoes:
+            agendamento.observacoes = f"{agendamento.observacoes}\n\n{note}"
+        else:
+            agendamento.observacoes = note
+
+        agendamento.save(update_fields=["observacoes"])
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -301,6 +411,21 @@ class PublicBookingForm(forms.Form):
         servico = cleaned_data.get("servico")
         profissional = cleaned_data.get("profissional")
         hora = cleaned_data.get("hora")
+        payload_items = cleaned_data.get("produtos_json") or []
+        data_retirada_produtos = cleaned_data.get("data_retirada_produtos")
+
+        selected_products, products_total, product_errors = self._resolve_selected_products(payload_items)
+        if product_errors:
+            self.add_error("produtos_json", " ".join(product_errors[:3]))
+
+        if payload_items and not selected_products and not product_errors:
+            self.add_error("produtos_json", "Selecione ao menos um produto valido no catalogo da empresa.")
+
+        if selected_products and not data_retirada_produtos:
+            self.add_error("data_retirada_produtos", "Informe uma data para retirada dos produtos selecionados.")
+
+        cleaned_data["selected_products"] = selected_products
+        cleaned_data["selected_products_total"] = products_total
 
         if booking_type == "pacote_mensal":
             mes_referencia = cleaned_data.get("mes_referencia")
@@ -434,6 +559,7 @@ class PublicBookingForm(forms.Form):
 
             first_occurrence = plano.first_occurrence
             if first_occurrence is not None:
+                self._append_products_note_to_appointment(first_occurrence)
                 notify_booking_created(first_occurrence)
 
             return {
@@ -498,6 +624,8 @@ class PublicBookingForm(forms.Form):
         if hold is not None:
             hold.status = "consumed"
             hold.save(update_fields=["status", "atualizado_em"])
+
+        self._append_products_note_to_appointment(agendamento)
 
         notify_booking_created(agendamento)
 

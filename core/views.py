@@ -12,6 +12,7 @@ from django.utils import timezone
 import logging
 import json
 import re
+from decimal import Decimal
 from datetime import timedelta
 import secrets
 import stripe
@@ -50,9 +51,14 @@ def home(request):
         template = "home.html"
         context = {}
     else:
-        empresas = Empresa.objects.all().order_by("nome")
+        empresa_id = (request.GET.get("empresa") or "").strip()
+        if empresa_id.isdigit():
+            empresa = Empresa.objects.filter(pk=int(empresa_id)).first()
+            if empresa:
+                return redirect("cliente_empresa", empresa_id=empresa.id)
+
         template = "core/cliente_publico.html"
-        context = {"empresas": empresas}
+        context = {}
     return render(request, template, context)
 
 
@@ -116,6 +122,119 @@ def _set_portal_cliente(request, empresa_id, pessoa_id):
 def _clear_portal_cliente(request, empresa_id):
     request.session.pop(_portal_session_key(empresa_id), None)
     request.session.modified = True
+
+
+def _cart_session_key(empresa_id):
+    return f"portal_carrinho_empresa_{empresa_id}"
+
+
+def _get_cart_data(request, empresa_id):
+    raw = request.session.get(_cart_session_key(empresa_id), {})
+    if not isinstance(raw, dict):
+        return {}
+
+    cleaned = {}
+    for raw_produto_id, raw_quantidade in raw.items():
+        try:
+            produto_id = int(raw_produto_id)
+            quantidade = int(raw_quantidade)
+        except (TypeError, ValueError):
+            continue
+
+        if produto_id <= 0 or quantidade <= 0:
+            continue
+
+        cleaned[str(produto_id)] = quantidade
+
+    return cleaned
+
+
+def _save_cart_data(request, empresa_id, cart_data):
+    normalized = {}
+    for raw_produto_id, raw_quantidade in (cart_data or {}).items():
+        try:
+            produto_id = int(raw_produto_id)
+            quantidade = int(raw_quantidade)
+        except (TypeError, ValueError):
+            continue
+
+        if produto_id <= 0 or quantidade <= 0:
+            continue
+
+        normalized[str(produto_id)] = quantidade
+
+    request.session[_cart_session_key(empresa_id)] = normalized
+    request.session.modified = True
+
+
+def _clear_cart_data(request, empresa_id):
+    request.session.pop(_cart_session_key(empresa_id), None)
+    request.session.modified = True
+
+
+def _build_cart_payload(empresa, cart_data):
+    produto_ids = []
+    for raw_produto_id in (cart_data or {}).keys():
+        try:
+            produto_id = int(raw_produto_id)
+        except (TypeError, ValueError):
+            continue
+
+        if produto_id > 0:
+            produto_ids.append(produto_id)
+
+    produtos = {
+        produto.id: produto
+        for produto in Produto.objects.filter(empresa=empresa, ativo=True, pk__in=produto_ids)
+    }
+
+    items = []
+    normalized_cart = {}
+    total_preco = Decimal("0")
+    total_itens = 0
+
+    for raw_produto_id, raw_quantidade in (cart_data or {}).items():
+        try:
+            produto_id = int(raw_produto_id)
+            quantidade = int(raw_quantidade)
+        except (TypeError, ValueError):
+            continue
+
+        if quantidade <= 0:
+            continue
+
+        produto = produtos.get(produto_id)
+        if produto is None:
+            continue
+
+        estoque_disponivel = max(int(produto.estoque_disponivel), 0)
+        if estoque_disponivel <= 0:
+            continue
+
+        quantidade_final = min(quantidade, estoque_disponivel)
+        if quantidade_final <= 0:
+            continue
+
+        preco_total = produto.preco * quantidade_final
+
+        normalized_cart[str(produto.id)] = quantidade_final
+        total_itens += quantidade_final
+        total_preco += preco_total
+        items.append({
+            "produto_id": produto.id,
+            "nome": produto.nome,
+            "quantidade": quantidade_final,
+            "preco": str(produto.preco),
+            "preco_total": str(preco_total),
+            "estoque_disponivel": estoque_disponivel,
+        })
+
+    return {
+        "itens": items,
+        "total_itens": total_itens,
+        "total_preco": str(total_preco),
+        "cart": normalized_cart,
+    }
 
 
 def _normalize_phone(value):
@@ -235,6 +354,214 @@ def _can_client_change_appointment(agendamento):
     return agendamento.status not in ("cancelado", "finalizado") and agendamento.data >= hoje
 
 
+def empresa_catalogo(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    profile = get_business_profile(empresa.tipo)
+
+    context = {
+        "empresa": empresa,
+        "profile": profile,
+        "servicos": Servico.objects.filter(empresa=empresa, ativo=True).order_by("nome"),
+        "profissionais": Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome"),
+        "produtos_count": Produto.objects.filter(empresa=empresa, ativo=True).count(),
+    }
+    return render(request, "core/catalogo_empresa.html", context)
+
+
+def loja_produtos(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    profile = get_business_profile(empresa.tipo)
+    busca = (request.GET.get("busca") or "").strip()
+    categoria_selecionada = (request.GET.get("categoria") or "").strip()
+
+    produtos = Produto.objects.filter(empresa=empresa, ativo=True).order_by("nome")
+    if busca:
+        produtos = produtos.filter(nome__icontains=busca)
+    if categoria_selecionada:
+        produtos = produtos.filter(categoria=categoria_selecionada)
+
+    categorias = (
+        Produto.objects.filter(empresa=empresa, ativo=True)
+        .exclude(categoria="")
+        .order_by("categoria")
+        .values_list("categoria", flat=True)
+        .distinct()
+    )
+
+    cart_payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, cart_payload["cart"])
+
+    return render(request, "core/loja_produtos.html", {
+        "empresa": empresa,
+        "profile": profile,
+        "produtos": produtos,
+        "busca": busca,
+        "categoria_selecionada": categoria_selecionada,
+        "categorias": categorias,
+        "cart_total_items": cart_payload["total_itens"],
+    })
+
+
+@require_http_methods(["GET"])
+def api_carrinho_listar(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, payload["cart"])
+
+    return JsonResponse({
+        "status": "sucesso",
+        "itens": payload["itens"],
+        "total_itens": payload["total_itens"],
+        "total_preco": payload["total_preco"],
+    })
+
+
+@require_http_methods(["POST"])
+def api_carrinho_adicionar(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    try:
+        produto_id = int(data.get("produto_id"))
+        quantidade = int(data.get("quantidade", 1))
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "erro", "message": "Produto ou quantidade invalida."}, status=400)
+
+    if quantidade <= 0:
+        return JsonResponse({"status": "erro", "message": "A quantidade deve ser maior que zero."}, status=400)
+
+    produto = Produto.objects.filter(empresa=empresa, ativo=True, pk=produto_id).first()
+    if not produto:
+        return JsonResponse({"status": "erro", "message": "Produto nao encontrado nesta empresa."}, status=404)
+
+    estoque_disponivel = max(int(produto.estoque_disponivel), 0)
+    if estoque_disponivel <= 0:
+        return JsonResponse({"status": "erro", "message": "Produto sem estoque disponivel."}, status=400)
+
+    cart_data = _get_cart_data(request, empresa.id)
+    quantidade_atual = int(cart_data.get(str(produto.id), 0))
+    quantidade_final = quantidade_atual + quantidade
+
+    if quantidade_final > estoque_disponivel:
+        return JsonResponse({
+            "status": "erro",
+            "message": f"Estoque insuficiente. Restam {estoque_disponivel} unidade(s).",
+        }, status=400)
+
+    cart_data[str(produto.id)] = quantidade_final
+    _save_cart_data(request, empresa.id, cart_data)
+
+    payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, payload["cart"])
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": "Produto adicionado ao carrinho.",
+        "itens": payload["itens"],
+        "total_itens": payload["total_itens"],
+        "total_preco": payload["total_preco"],
+    })
+
+
+@require_http_methods(["POST"])
+def api_carrinho_remover(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    try:
+        produto_id = int(data.get("produto_id"))
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "erro", "message": "Produto invalido."}, status=400)
+
+    cart_data = _get_cart_data(request, empresa.id)
+    cart_data.pop(str(produto_id), None)
+    _save_cart_data(request, empresa.id, cart_data)
+
+    payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, payload["cart"])
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": "Produto removido do carrinho.",
+        "itens": payload["itens"],
+        "total_itens": payload["total_itens"],
+        "total_preco": payload["total_preco"],
+    })
+
+
+@require_http_methods(["POST"])
+def api_carrinho_atualizar(request, empresa_id):
+    empresa = get_object_or_404(Empresa, pk=empresa_id)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    try:
+        produto_id = int(data.get("produto_id"))
+        quantidade = int(data.get("quantidade", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "erro", "message": "Produto ou quantidade invalida."}, status=400)
+
+    produto = Produto.objects.filter(empresa=empresa, ativo=True, pk=produto_id).first()
+    if not produto:
+        return JsonResponse({"status": "erro", "message": "Produto nao encontrado nesta empresa."}, status=404)
+
+    cart_data = _get_cart_data(request, empresa.id)
+    if quantidade <= 0:
+        cart_data.pop(str(produto.id), None)
+    else:
+        estoque_disponivel = max(int(produto.estoque_disponivel), 0)
+        if quantidade > estoque_disponivel:
+            return JsonResponse({
+                "status": "erro",
+                "message": f"Estoque insuficiente. Restam {estoque_disponivel} unidade(s).",
+            }, status=400)
+        cart_data[str(produto.id)] = quantidade
+
+    _save_cart_data(request, empresa.id, cart_data)
+    payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, payload["cart"])
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": "Carrinho atualizado.",
+        "itens": payload["itens"],
+        "total_itens": payload["total_itens"],
+        "total_preco": payload["total_preco"],
+    })
+
+
 def empresa_detail(request, empresa_id):
     empresa = get_object_or_404(Empresa, pk=empresa_id)
     access_denied = _enforce_company_portal_access(request, empresa)
@@ -249,6 +576,7 @@ def empresa_detail(request, empresa_id):
     success_client = None
     success_payment = None
     success_plan = None
+    booking_error_message = ""
 
     if request.method == "POST":
         form = PublicBookingForm(request.POST, empresa=empresa, session_key=request.session.session_key)
@@ -256,12 +584,21 @@ def empresa_detail(request, empresa_id):
             try:
                 result = form.save()
             except ValidationError:
-                pass
+                booking_error_message = "Nao foi possivel concluir sua reserva agora. Verifique os campos destacados e tente novamente."
+                messages.error(request, booking_error_message)
             else:
                 success_booking = result["agendamento"]
                 success_client = result["cliente"]
                 success_plan = result["plano"]
+                _set_portal_cliente(request, empresa.id, success_client.id)
+                _clear_cart_data(request, empresa.id)
                 request.session.modified = True
+
+                if success_plan:
+                    messages.success(request, "Pacote mensal criado com sucesso. Seus agendamentos ja estao disponiveis em Meus agendamentos.")
+                else:
+                    messages.success(request, "Reserva criada com sucesso. Confira os detalhes em Meus agendamentos.")
+
                 form = PublicBookingForm(empresa=empresa, initial={
                     "nome": success_client.nome,
                     "email": success_client.email,
@@ -269,6 +606,9 @@ def empresa_detail(request, empresa_id):
                     "documento": success_client.documento,
                     "data_nascimento": success_client.data_nascimento,
                 }, session_key=request.session.session_key)
+        else:
+            booking_error_message = "Nao foi possivel concluir sua reserva. Revise os campos obrigatorios e tente novamente."
+            messages.error(request, booking_error_message)
     else:
         form = PublicBookingForm(empresa=empresa, session_key=request.session.session_key)
 
@@ -279,6 +619,8 @@ def empresa_detail(request, empresa_id):
         .order_by('nome')
         [:3]
     )
+    cart_payload = _build_cart_payload(empresa, _get_cart_data(request, empresa.id))
+    _save_cart_data(request, empresa.id, cart_payload["cart"])
 
     context = {
         "empresa": empresa,
@@ -287,10 +629,13 @@ def empresa_detail(request, empresa_id):
         "cliente_portal_autenticado": bool(_get_portal_cliente(request, empresa)),
         "servicos": Servico.objects.filter(empresa=empresa, ativo=True).order_by("nome"),
         "produtos": top_produtos,
+        "produtos_total": Produto.objects.filter(empresa=empresa, ativo=True).count(),
+        "cart_total_items": cart_payload["total_itens"],
         "profissionais": Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome"),
         "success_booking": success_booking,
         "success_client": success_client,
         "success_plan": success_plan,
+        "booking_error_message": booking_error_message,
     }
     return render(request, "core/cliente_empresa.html", context)
 
@@ -797,6 +1142,8 @@ def cliente_agendamentos_api(request, empresa_id):
             "hora": ag.hora.strftime("%H:%M"),
             "status": ag.get_status_display(),
             "status_raw": ag.status,
+            "pagamento_status": ag.get_pagamento_status_display(),
+            "pagamento_url": "",
             "tipo": "Proximo" if ag.data >= hoje else "Historico",
             "valor": str(ag.servico.preco),
             "can_change": _can_client_change_appointment(ag),

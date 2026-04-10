@@ -134,4 +134,7 @@ def empresa_configuracoes(request):
         'empresa': empresa,
         'profissionais': profissionais,
         'module_choices': profissional_module_choices(),
+        'portal_agendamento_url': request.build_absolute_uri(reverse('cliente_empresa', args=[empresa.id])),
+        'portal_catalogo_url': request.build_absolute_uri(reverse('cliente_catalogo', args=[empresa.id])),
+        'portal_loja_url': request.build_absolute_uri(reverse('loja_produtos', args=[empresa.id])),
     })

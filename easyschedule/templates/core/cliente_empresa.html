@@ -13,7 +13,7 @@
   <div class="client-company-shell">
     <header class="client-company-hero">
       <div>
-        <a class="back-link" href="{% url 'cliente_home' %}">Voltar para empresas</a>
+        <a class="back-link" href="{% url 'cliente_catalogo' empresa.id %}">Ver catalogo completo da empresa</a>
         <p class="client-eyebrow">{{ profile.label }}</p>
         <h1>{{ empresa.nome }}</h1>
         <p class="client-subtitle">
@@ -25,6 +25,7 @@
         <span class="preview-chip">{{ profile.client_term_plural }}</span>
         <span class="preview-chip">{{ profile.service_term_plural }}</span>
         <span class="preview-chip">{{ profile.appointment_term_plural }}</span>
+        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; text-decoration: none;">Ver todos os produtos</a>
       </div>
     </header>
 
@@ -105,8 +106,8 @@
           <h2>Produtos da empresa</h2>
           <p>Confira alguns itens disponiveis para venda pela empresa no mesmo portal.</p>
         </div>
-        <a href="{% url 'cliente_home' %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
-          Ver outras empresas
+        <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem; text-decoration: none;">
+          Ver todos os produtos ({{ produtos_total }})
         </a>
       </div>
 
@@ -154,8 +155,8 @@
           <strong>Total de produtos:</strong> R$ <span id="carrinho-total">0.00</span>
         </p>
         <div style="margin-top: 1rem;">
-          <a href="{% url 'cliente_empresa' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block;">
-            Atualizar produtos
+          <a href="{% url 'loja_produtos' empresa.id %}" class="btn-success" style="padding: 0.5rem 1rem; display: inline-block; text-decoration: none;">
+            Adicionar mais produtos
           </a>
           <button type="button" onclick="limparCarrinho()" class="btn-success" style="padding: 0.5rem 1rem; background: #ef4444;">
             Limpar carrinho
@@ -164,7 +165,7 @@
       </div>
 
       <p id="carrinho-vazio" style="color: var(--text-2); text-align: center; padding: 1rem;">
-        Nenhum produto no carrinho. <a href="{% url 'cliente_empresa' empresa.id %}" style="text-decoration: underline;">Ver produtos</a>
+        Nenhum produto no carrinho. <a href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: underline;">Ver produtos</a>
       </p>
     </section>
 
@@ -179,6 +180,7 @@
       <form id="bookingForm" method="post" class="client-booking-form" novalidate>
         {% csrf_token %}
         {{ form.slot_hold_token }}
+        {{ form.produtos_json }}
         {% if form.non_field_errors %}
         <div class="client-form-errors">{{ form.non_field_errors }}</div>
         {% endif %}
@@ -265,6 +267,12 @@
             {{ form.observacoes }}
             {{ form.observacoes.errors }}
           </div>
+          <div class="client-form-group client-form-group-full">
+            <label>{{ form.data_retirada_produtos.label }}</label>
+            {{ form.data_retirada_produtos }}
+            <small class="field-help">Se houver produtos no carrinho, informe o dia para retirada na empresa.</small>
+            {{ form.data_retirada_produtos.errors }}
+          </div>
         </div>
 
         <p id="slotsFeedback" class="slots-feedback">Selecione servico, profissional e o formato desejado para ver os horarios livres.</p>
@@ -276,7 +284,7 @@
       </form>
     </section>
 
-    <section class="client-panel">
+    <section class="client-panel" id="meus-agendamentos">
       <div class="client-panel-header">
         <div>
           <h2>Meus agendamentos</h2>
@@ -368,6 +376,7 @@ function carregarCarrinho() {
       const carrinhoLista = document.getElementById('carrinho-lista');
       const carrinhoVazio = document.getElementById('carrinho-vazio');
       const carrinhoTotal = document.getElementById('carrinho-total');
+      const produtosInput = document.querySelector('#bookingForm input[name="produtos_json"]');
       
       if (data.total_itens > 0) {
         carrinhoItems.style.display = 'block';
@@ -387,10 +396,16 @@ function carregarCarrinho() {
         `).join('');
         
         carrinhoTotal.textContent = parseFloat(data.total_preco).toFixed(2);
+        if (produtosInput) {
+          produtosInput.value = JSON.stringify(data.itens);
+        }
       } else {
         carrinhoSection.style.display = 'none';
         carrinhoItems.style.display = 'none';
         carrinhoVazio.style.display = 'block';
+        if (produtosInput) {
+          produtosInput.value = '';
+        }
       }
     })
     .catch(err => console.error('Erro ao carregar carrinho:', err));
@@ -417,33 +432,6 @@ window.limparCarrinho = function() {
       .then(() => carregarCarrinho());
   }
 };
-
-// Integrar produtos do carrinho ao formulário
-function adicionarProdutosAoFormulario() {
-  const form = document.querySelector('.client-booking-form');
-  if (!form) return;
-  
-  // Adicionar campo hidden para produtos
-  let produtosInput = form.querySelector('input[name="produtos_json"]');
-  if (!produtosInput) {
-    produtosInput = document.createElement('input');
-    produtosInput.type = 'hidden';
-    produtosInput.name = 'produtos_json';
-    form.appendChild(produtosInput);
-  }
-  
-  // Atualizar com dados do carrinho
-  fetch(`/cliente/empresa/${empresa_id}/api/carrinho/listar/`)
-    .then(r => r.json())
-    .then(data => {
-      if (data.total_itens > 0) {
-        produtosInput.value = JSON.stringify(data.itens);
-      }
-    });
-}
-
-// Executar ao enviar formulário
-document.getElementById('bookingForm')?.addEventListener('submit', adicionarProdutosAoFormulario);
 
 // Carregar carrinho ao abrir página
 carregarCarrinho();
@@ -674,6 +662,10 @@ portalLogoutBtn?.addEventListener('click', async () => {
 {% if cliente_portal_autenticado %}
 portalActions.style.display = 'flex';
 carregarMeusAgendamentos().catch((error) => setTrackFeedback(error.message, 'is-error'));
+{% endif %}
+
+{% if success_booking %}
+document.getElementById('meus-agendamentos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 {% endif %}
 </script>
 {% endblock %}

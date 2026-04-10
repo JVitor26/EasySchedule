@@ -14,6 +14,7 @@ from empresas.models import Empresa
 from core.models import PasswordRecoveryCode, StripeWebhookEvent
 from pessoa.models import Pessoa
 from profissionais.models import Profissional
+from produtos.models import Produto
 from servicos.models import Servico
 
 
@@ -39,12 +40,13 @@ class HomepageRoutingTests(TestCase):
         self.assertContains(response, "Bem-vindo ao EasySchedule")
         self.assertNotContains(response, "Nenhuma empresa publicada ainda.")
 
-    def test_cliente_home_renders_public_company_list(self):
+    def test_cliente_home_exige_link_da_empresa(self):
         response = self.client.get(reverse("cliente_home"))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "core/cliente_publico.html")
-        self.assertContains(response, self.empresa.nome)
+        self.assertContains(response, "Use o link da empresa")
+        self.assertNotContains(response, self.empresa.nome)
 
     def test_login_redirect_goes_to_dashboard_for_company_owner(self):
         response = self.client.post(
@@ -90,6 +92,16 @@ class PublicCustomerBookingTests(TestCase):
             preco=70,
             tempo=60,
             ativo=True,
+        )
+        self.produto = Produto.objects.create(
+            empresa=self.empresa,
+            nome="Pomada Premium",
+            categoria="Finalizacao",
+            descricao="Fixacao forte",
+            preco="39.90",
+            estoque=12,
+            ativo=True,
+            destaque_publico=True,
         )
         self.data_agendamento = timezone.localdate() + timedelta(days=3)
 
@@ -581,6 +593,39 @@ class PublicCustomerBookingTests(TestCase):
         self.assertEqual(plano.agendamentos.count(), plano.quantidade_encontros)
         self.assertTrue(plano.agendamentos.filter(status="pendente").exists())
         self.assertEqual(plano.pagamento_status, "pendente")
+
+    def test_cliente_publico_adiciona_e_lista_produtos_no_carrinho_da_empresa(self):
+        add_response = self.client.post(
+            reverse("api_carrinho_adicionar", args=[self.empresa.pk]),
+            data=json.dumps({"produto_id": self.produto.pk, "quantidade": 2}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(add_response.status_code, 200)
+        self.assertEqual(add_response.json()["status"], "sucesso")
+        self.assertEqual(add_response.json()["total_itens"], 2)
+
+        list_response = self.client.get(reverse("api_carrinho_listar", args=[self.empresa.pk]))
+
+        self.assertEqual(list_response.status_code, 200)
+        payload = list_response.json()
+        self.assertEqual(payload["status"], "sucesso")
+        self.assertEqual(payload["total_itens"], 2)
+        self.assertEqual(len(payload["itens"]), 1)
+        self.assertEqual(payload["itens"][0]["produto_id"], self.produto.pk)
+
+    def test_catalogo_da_empresa_exibe_servicos_e_profissionais(self):
+        response = self.client.get(reverse("cliente_catalogo", args=[self.empresa.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.servico.nome)
+        self.assertContains(response, self.profissional.nome)
+
+    def test_loja_da_empresa_exibe_produtos_ativos(self):
+        response = self.client.get(reverse("loja_produtos", args=[self.empresa.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.produto.nome)
 
 
 class PasswordRecoveryTests(TestCase):

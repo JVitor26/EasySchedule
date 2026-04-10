@@ -26,6 +26,7 @@
     <!-- Filtros e Busca -->
     <section class="client-panel">
       <form method="GET" style="display: grid; grid-template-columns: 1fr 200px 120px; gap: 1rem; align-items: flex-end;">
+        {% csrf_token %}
         <div style="display: flex; flex-direction: column; gap: 0.55rem;">
           <label style="color: var(--text-2); font-weight: 700;">Buscar produtos</label>
           <input type="text" name="busca" placeholder="Digite o nome..." value="{{ busca }}" 
@@ -47,7 +48,7 @@
         <button type="submit" class="btn-success">Filtrar</button>
       </form>
       
-      {% if busca or categoria %}
+      {% if busca or categoria_selecionada %}
       <p style="margin-top: 0.75rem; text-align: right;">
         <a href="{% url 'loja_produtos' empresa.id %}" style="color: var(--accent); text-decoration: underline; font-weight: 600;">Limpar filtros</a>
       </p>

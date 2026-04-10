@@ -117,6 +117,25 @@
         </div>
 
         <div class="form-group full">
+          <label>Links publicos da empresa</label>
+          <small class="field-help">Compartilhe estes links com seus clientes. Eles mostram apenas o portal da sua empresa.</small>
+          <div class="file-preview-card" style="width: 100%; gap: 0.85rem;">
+            <div>
+              <small class="field-help">Agendamento direto</small>
+              <input type="text" readonly value="{{ portal_agendamento_url }}">
+            </div>
+            <div>
+              <small class="field-help">Catalogo de servicos e profissionais</small>
+              <input type="text" readonly value="{{ portal_catalogo_url }}">
+            </div>
+            <div>
+              <small class="field-help">Loja de produtos da empresa</small>
+              <input type="text" readonly value="{{ portal_loja_url }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group full">
           <label for="brandingCompanyPreviewHeader">Preview da identidade visual</label>
           <div style="border:1px solid var(--border-soft);border-radius:14px;overflow:hidden;background:#ffffff;">
             <div id="brandingCompanyPreviewHeader" style="padding:16px;background:linear-gradient(135deg,#0f4c81,#188fa7);color:#ffffff;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">

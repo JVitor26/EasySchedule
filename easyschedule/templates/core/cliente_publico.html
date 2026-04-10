@@ -191,36 +191,32 @@
 <body>
     <!-- Header -->
     <header class="client-public-header">
-        <h1>EasySchedule</h1>
-        <p>Agente online de forma simples e segura. Escolha uma empresa e reserve seu horário quando quiser.</p>
+        <h1>Portal do Cliente EasySchedule</h1>
+        <p>O acesso e privado por empresa. Abra o link de agendamento enviado pelo profissional ou administrador.</p>
     </header>
 
     <!-- Navigation -->
     <nav class="client-public-nav">
-        <a href="#empresas">Empresas</a>
+        <a href="#acesso">Acesso por link</a>
         <a href="{% url 'login' %}">Já tenho conta</a>
         <a href="{% url 'cadastro_empresa' %}">Sou empresa</a>
     </nav>
 
     <!-- Main Content -->
-    <main class="client-companies-container">
-        <section id="empresas">
-            <div class="client-company-grid">
-                {% for empresa in empresas %}
-                <article class="client-company-card">
-                    <span class="company-pill">{{ empresa.business_profile.label }}</span>
-                    <h2>{{ empresa.nome }}</h2>
-                    <p>Agende com {{ empresa.business_profile.professional_term_plural|lower }}, veja apenas os horários livres, monte pacotes mensais, confira produtos e efetue pagamento online.</p>
-                    <a class="btn-success" href="{% url 'cliente_empresa' empresa.id %}">Agendar com esta empresa</a>
-                </article>
-                {% empty %}
-                <div class="client-empty">
-                    <strong>Nenhuma empresa publicada ainda.</strong>
-                    <p>Assim que novas empresas entrarem na plataforma, elas vão aparecer aqui para agendamento.</p>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
+    <main class="client-companies-container" id="acesso">
+        <div class="client-company-grid" style="grid-template-columns: minmax(320px, 680px); justify-content: center;">
+            <article class="client-company-card" style="cursor: default;">
+                <span class="company-pill">Acesso privado</span>
+                <h2>Use o link da empresa</h2>
+                <p>
+                    Para proteger a privacidade entre empresas, o portal do cliente nao exibe mais a lista global.
+                    Solicite o link de agendamento diretamente ao profissional ou ao administrador da empresa.
+                </p>
+                <p style="margin-bottom: 0; color: var(--text-2); font-size: 0.9rem;">
+                    Exemplo de link: <strong>/cliente/empresa/123/</strong>
+                </p>
+            </article>
+        </div>
     </main>
 
     <!-- Footer -->

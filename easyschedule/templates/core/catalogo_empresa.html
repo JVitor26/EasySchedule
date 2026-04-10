@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Catalogo - {{ empresa.nome }}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/client_portal.css' %}">
+
+<section class="client-company-page">
+  <div class="client-company-shell">
+    <header class="client-company-hero">
+      <div>
+        <a class="back-link" href="{% url 'cliente_empresa' empresa.id %}">Voltar para agendamento</a>
+        <p class="client-eyebrow">Catalogo da empresa</p>
+        <h1>{{ empresa.nome }}</h1>
+        <p class="client-subtitle">
+          Veja todos os {{ profile.service_term_plural|lower }} e {{ profile.professional_term_plural|lower }} ativos desta empresa antes de reservar.
+        </p>
+      </div>
+      <div class="client-company-badges">
+        <span class="preview-chip">{{ profile.service_term_plural }}</span>
+        <span class="preview-chip">{{ profile.professional_term_plural }}</span>
+        <span class="preview-chip">Produtos: {{ produtos_count }}</span>
+      </div>
+    </header>
+
+    <section class="client-detail-grid">
+      <article class="client-panel">
+        <div class="client-panel-header">
+          <div>
+            <h2>{{ profile.service_term_plural }}</h2>
+            <p>Catalogo completo de opcoes disponiveis para agendamento.</p>
+          </div>
+        </div>
+
+        <div class="client-mini-list">
+          {% for servico in servicos %}
+          <article class="mini-item">
+            <strong>{{ servico.nome }}</strong>
+            <span>{{ servico.tempo }} min</span>
+            <small>R$ {{ servico.preco|floatformat:2 }}</small>
+          </article>
+          {% empty %}
+          <p class="client-empty-inline">Nenhum servico ativo cadastrado no momento.</p>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="client-panel">
+        <div class="client-panel-header">
+          <div>
+            <h2>{{ profile.professional_term_plural }}</h2>
+            <p>Equipe disponivel para atendimento nesta empresa.</p>
+          </div>
+        </div>
+
+        <div class="client-mini-list">
+          {% for profissional in profissionais %}
+          <article class="mini-item">
+            <strong>{{ profissional.nome }}</strong>
+            <span>{{ profissional.especialidade|default:'Especialidade nao informada' }}</span>
+            <small>Disponivel para novos horarios</small>
+          </article>
+          {% empty %}
+          <p class="client-empty-inline">Nenhum profissional ativo cadastrado no momento.</p>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    <section class="client-panel" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between;">
+      <p class="client-subtitle" style="margin: 0;">Pronto para reservar? Escolha seu horario ou confira os produtos da empresa.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.65rem;">
+        <a class="btn-secondary" href="{% url 'cliente_empresa' empresa.id %}" style="text-decoration: none;">Ir para agendamento</a>
+        <a class="btn-success" href="{% url 'loja_produtos' empresa.id %}" style="text-decoration: none;">Ver produtos da empresa</a>
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %}

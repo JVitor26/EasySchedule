@@ -39,6 +39,41 @@ document.addEventListener("DOMContentLoaded", () => {
         bookingFields: Array.from(document.querySelectorAll("[data-booking-field]")),
     };
 
+    function readCookie(name) {
+        const prefix = `${name}=`;
+        const cookie = document.cookie
+            .split(";")
+            .map((item) => item.trim())
+            .find((item) => item.startsWith(prefix));
+        return cookie ? cookie.slice(prefix.length) : "";
+    }
+
+    function getCsrfToken() {
+        return (
+            document.querySelector("[name=csrfmiddlewaretoken]")?.value ||
+            readCookie("csrftoken") ||
+            ""
+        );
+    }
+
+    async function parseJsonResponse(response, fallbackErrorMessage) {
+        const bodyText = await response.text();
+        if (!bodyText) {
+            return {};
+        }
+
+        try {
+            return JSON.parse(bodyText);
+        } catch (_error) {
+            if (!response.ok) {
+                throw new Error(fallbackErrorMessage || "O servidor retornou uma resposta invalida.");
+            }
+            throw new Error("Resposta invalida do servidor. Atualize a pagina e tente novamente.");
+        }
+    }
+
+    const csrfToken = getCsrfToken();
+
     let holdTimer = null;
 
     function getBookingType() {
@@ -129,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: {
                     "Content-Type": "application/json",
                     "X-Requested-With": "XMLHttpRequest",
+                    ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
                 },
                 body: JSON.stringify({
                     servico: elements.servico.value,
@@ -139,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }),
             });
 
-            const payload = await response.json();
+            const payload = await parseJsonResponse(response, "Nao foi possivel reservar o horario temporariamente.");
             if (!response.ok || payload.status !== "sucesso") {
                 throw new Error(payload.message || "Nao foi possivel reservar o horario temporariamente.");
             }
@@ -221,11 +257,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     },
                 });
 
+                const payload = await parseJsonResponse(response, "Nao foi possivel consultar os horarios do pacote.");
                 if (!response.ok) {
-                    throw new Error("Nao foi possivel consultar os horarios do pacote.");
+                    throw new Error(payload.message || "Nao foi possivel consultar os horarios do pacote.");
                 }
-
-                const payload = await response.json();
                 const slots = payload.slots || [];
 
                 if (slots.length) {
@@ -269,11 +304,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 },
             });
 
+            const payload = await parseJsonResponse(response, "Nao foi possivel consultar os horarios.");
             if (!response.ok) {
-                throw new Error("Nao foi possivel consultar os horarios.");
+                throw new Error(payload.message || "Nao foi possivel consultar os horarios.");
             }
-
-            const payload = await response.json();
             const slots = payload.slots || [];
 
             if (slots.length) {
