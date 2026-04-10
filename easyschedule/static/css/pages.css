@@ -236,6 +236,17 @@
     border: 1px solid var(--border-soft);
 }
 
+.logo-preview-image {
+    width: min(100%, 16rem);
+    max-height: 6rem;
+    aspect-ratio: auto;
+    object-fit: contain;
+    object-position: center;
+    border-radius: 0.85rem;
+    padding: 0.35rem;
+    background: rgba(255, 255, 255, 0.92);
+}
+
 .confirm-shell {
     display: flex;
     justify-content: center;

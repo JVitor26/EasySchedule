@@ -72,12 +72,12 @@
           {{ form.logo }}
           {% if empresa.logo %}
           <div class="file-preview-card">
-            <img src="{{ empresa.logo.url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image">
+            <img src="{{ empresa.logo.url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image logo-preview-image">
             <span class="table-note">Logo atual da empresa.</span>
           </div>
           {% elif empresa.logo_url %}
           <div class="file-preview-card">
-            <img src="{{ empresa.logo_url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image">
+            <img src="{{ empresa.logo_url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image logo-preview-image">
             <span class="table-note">Logo atual da empresa (origem URL).</span>
           </div>
           {% endif %}
