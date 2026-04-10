@@ -44,7 +44,7 @@
   </aside>
 
   <section class="auth-card">
-    <form method="post" class="auth-form">
+    <form method="post" enctype="multipart/form-data" class="auth-form">
       {% csrf_token %}
 
       <div class="auth-tabs">
@@ -112,9 +112,10 @@
       </div>
 
       <div class="auth-fields">
-        <label for="id_logo_url">Logo da empresa (URL opcional)</label>
-        {{ form.logo_url }}
-        {{ form.logo_url.errors }}
+        <label for="id_logo">Logo da empresa (upload opcional)</label>
+        {{ form.logo }}
+        <small class="form-help">Envie uma imagem do computador ou celular.</small>
+        {{ form.logo.errors }}
       </div>
 
       <div class="auth-fields">

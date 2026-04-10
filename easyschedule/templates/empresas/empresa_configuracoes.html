@@ -19,7 +19,7 @@
     </div>
   </header>
 
-  <form method="post" class="form-card">
+  <form method="post" enctype="multipart/form-data" class="form-card">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
@@ -54,9 +54,34 @@
         </div>
 
         <div class="form-group">
-          <label for="id_logo_url">Logo da empresa (URL opcional)</label>
-          {{ form.logo_url }}
-          {{ form.logo_url.errors }}
+          <label for="id_plano">Plano do sistema</label>
+          {{ form.plano }}
+          <small class="field-help">Mude para um plano mais adequado quando quiser fazer upgrade.</small>
+          {{ form.plano.errors }}
+        </div>
+
+        <div class="form-group">
+          <label for="id_limite_profissionais">Quantidade de funcionarios no plano</label>
+          {{ form.limite_profissionais }}
+          <small class="field-help">No plano Start, escolha de 1 a 5 funcionarios com acesso.</small>
+          {{ form.limite_profissionais.errors }}
+        </div>
+
+        <div class="form-group full">
+          <label for="id_logo">Logo da empresa (upload opcional)</label>
+          {{ form.logo }}
+          {% if empresa.logo %}
+          <div class="file-preview-card">
+            <img src="{{ empresa.logo.url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image">
+            <span class="table-note">Logo atual da empresa.</span>
+          </div>
+          {% elif empresa.logo_url %}
+          <div class="file-preview-card">
+            <img src="{{ empresa.logo_url }}" alt="Logo {{ empresa.nome }}" class="file-preview-image">
+            <span class="table-note">Logo atual da empresa (origem URL).</span>
+          </div>
+          {% endif %}
+          {{ form.logo.errors }}
         </div>
 
         <div class="form-group">

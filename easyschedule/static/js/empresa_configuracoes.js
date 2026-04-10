@@ -2,6 +2,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const ids = {
         companyNameInput: document.getElementById("id_nome"),
         companyTypeInput: document.getElementById("id_tipo"),
+        planInput: document.getElementById("id_plano"),
+        professionalsLimitInput: document.getElementById("id_limite_profissionais"),
         primaryColorInput: document.getElementById("id_cor_primaria"),
         secondaryColorInput: document.getElementById("id_cor_secundaria"),
         primaryColorPicker: document.getElementById("id_cor_primaria_picker"),
@@ -102,6 +104,41 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function syncPlanLimitField() {
+        if (!ids.planInput || !ids.professionalsLimitInput) {
+            return;
+        }
+
+        const wrap = ids.professionalsLimitInput.closest(".form-group");
+        const selectedPlan = ids.planInput.value;
+
+        if (selectedPlan === "solo") {
+            ids.professionalsLimitInput.value = "1";
+            ids.professionalsLimitInput.readOnly = true;
+            if (wrap) {
+                wrap.style.display = "block";
+            }
+            return;
+        }
+
+        if (selectedPlan === "admin_only") {
+            ids.professionalsLimitInput.value = "5";
+            ids.professionalsLimitInput.readOnly = true;
+            if (wrap) {
+                wrap.style.display = "block";
+            }
+            return;
+        }
+
+        ids.professionalsLimitInput.readOnly = false;
+        if (!ids.professionalsLimitInput.value || Number(ids.professionalsLimitInput.value) < 1) {
+            ids.professionalsLimitInput.value = "1";
+        }
+        if (wrap) {
+            wrap.style.display = "block";
+        }
+    }
+
     bindColorPicker(ids.primaryColorInput, ids.primaryColorPicker, "#0f4c81", refreshPreview);
     bindColorPicker(ids.secondaryColorInput, ids.secondaryColorPicker, "#188fa7", refreshPreview);
 
@@ -111,6 +148,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ids.companyTypeInput) {
         ids.companyTypeInput.addEventListener("change", refreshPreview);
     }
+    if (ids.planInput) {
+        ids.planInput.addEventListener("change", syncPlanLimitField);
+    }
 
+    syncPlanLimitField();
     refreshPreview();
 });

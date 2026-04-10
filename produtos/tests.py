@@ -1,10 +1,12 @@
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
 from empresas.models import Empresa
 
@@ -36,6 +38,12 @@ class ProdutoFlowTests(TestCase):
                 if file_path.is_file():
                     file_path.unlink()
 
+    def _build_png_file(self, filename="produto.png"):
+        image_buffer = BytesIO()
+        Image.new("RGB", (4, 4), color=(12, 96, 180)).save(image_buffer, format="PNG")
+        image_buffer.seek(0)
+        return SimpleUploadedFile(filename, image_buffer.getvalue(), content_type="image/png")
+
     def test_empresa_consegue_cadastrar_produto_com_foto(self):
         self.client.force_login(self.user)
 
@@ -50,7 +58,7 @@ class ProdutoFlowTests(TestCase):
                 "especificacoes": "Frasco 120g | efeito seco",
                 "ativo": "on",
                 "destaque_publico": "on",
-                "foto": SimpleUploadedFile("pomada.png", b"fake-image-content", content_type="image/png"),
+                "foto": self._build_png_file("pomada.png"),
             },
         )
 

@@ -16,7 +16,7 @@ class Produto(models.Model):
     valor_venda = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Valor cobrado na venda ao cliente")
     estoque = models.PositiveIntegerField(default=0)
     estoque_reservado = models.PositiveIntegerField(default=0, help_text="Quantidade reservada em agendamentos não pagos")
-    foto = models.FileField(upload_to="produtos/", blank=True)
+    foto = models.ImageField(upload_to="produtos/", blank=True)
     ativo = models.BooleanField(default=True)
     destaque_publico = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)

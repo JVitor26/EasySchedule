@@ -35,7 +35,9 @@
             <div class="app-navbar">
                 <a class="app-brand" href="{% if user.is_authenticated %}{% url 'dashboard_home' %}{% else %}{% url 'cliente_home' %}{% endif %}">
                     <span class="brand-mark">
-                        {% if user.is_authenticated and empresa_atual and empresa_atual.logo_url %}
+                        {% if user.is_authenticated and empresa_atual and empresa_atual.logo %}
+                        <img src="{{ empresa_atual.logo.url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo">
+                        {% elif user.is_authenticated and empresa_atual and empresa_atual.logo_url %}
                         <img src="{{ empresa_atual.logo_url }}" alt="Logo {{ empresa_atual.nome }}" class="brand-logo">
                         {% else %}
                         <img src="{% static 'img/Logo.png' %}" alt="Logo EasySchedule" class="brand-logo">

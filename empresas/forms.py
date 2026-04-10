@@ -30,7 +30,7 @@ class CadastroEmpresaForm(forms.Form):
     tipo_empresa = forms.ChoiceField(label='Tipo de empresa', choices=get_business_type_choices())
     nome_empresa = forms.CharField(label='Nome da empresa', max_length=100)
     whatsapp = forms.CharField(label='WhatsApp da empresa', max_length=20, required=False)
-    logo_url = forms.URLField(label='Logo da empresa (URL opcional)', required=False)
+    logo = forms.ImageField(label='Logo da empresa (upload opcional)', required=False)
     cor_primaria = forms.CharField(label='Cor primaria (hex opcional)', max_length=7, required=False)
     cor_secundaria = forms.CharField(label='Cor secundaria (hex opcional)', max_length=7, required=False)
     plano = forms.ChoiceField(label='Plano', choices=Empresa.PLANO_CHOICES, initial=Empresa.PLANO_SOLO)
@@ -63,9 +63,8 @@ class CadastroEmpresaForm(forms.Form):
             'placeholder': '(65) 99999-9999',
             'autocomplete': 'tel',
         })
-        self.fields['logo_url'].widget.attrs.update({
-            'placeholder': 'https://seusite.com/logo.png',
-            'autocomplete': 'url',
+        self.fields['logo'].widget.attrs.update({
+            'accept': 'image/*',
         })
         self.fields['cor_primaria'].widget.attrs.update({
             'placeholder': '#0f4c81',
@@ -121,9 +120,6 @@ class CadastroEmpresaForm(forms.Form):
     def clean_whatsapp(self):
         return ''.join(filter(str.isdigit, self.cleaned_data.get('whatsapp', '')))
 
-    def clean_logo_url(self):
-        return (self.cleaned_data.get('logo_url') or '').strip()
-
     def clean_cor_primaria(self):
         return _normalize_hex_color(self.cleaned_data.get('cor_primaria'))
 
@@ -133,8 +129,22 @@ class CadastroEmpresaForm(forms.Form):
 
 class EmpresaConfiguracaoForm(forms.ModelForm):
     tipo = forms.ChoiceField(label='Tipo de empresa', choices=get_business_type_choices())
+    plano = forms.ChoiceField(label='Plano do sistema', choices=Empresa.PLANO_CHOICES)
+    limite_profissionais = forms.IntegerField(
+        label='Quantidade de funcionarios no plano',
+        min_value=1,
+        max_value=5,
+        required=False,
+        help_text='No plano Start, escolha de 1 a 5 funcionarios ativos.',
+    )
     cor_primaria = forms.CharField(label='Cor primaria (hex opcional)', max_length=7, required=False)
     cor_secundaria = forms.CharField(label='Cor secundaria (hex opcional)', max_length=7, required=False)
+
+    PLAN_PRICES = {
+        Empresa.PLANO_SOLO: 97,
+        Empresa.PLANO_START: 147,
+        Empresa.PLANO_ADMIN_ONLY: 127,
+    }
 
     class Meta:
         model = Empresa
@@ -142,7 +152,9 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
             'nome',
             'tipo',
             'whatsapp',
-            'logo_url',
+            'plano',
+            'limite_profissionais',
+            'logo',
             'cor_primaria',
             'cor_secundaria',
         ]
@@ -152,13 +164,38 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
         self.fields['nome'].label = 'Nome da empresa'
         self.fields['tipo'].label = 'Tipo de empresa'
         self.fields['whatsapp'].label = 'WhatsApp da empresa'
-        self.fields['logo_url'].label = 'Logo da empresa (URL opcional)'
+        self.fields['plano'].label = 'Plano do sistema'
+        self.fields['logo'].label = 'Logo da empresa (upload opcional)'
 
         self.fields['nome'].widget.attrs.update({'placeholder': 'Ex.: Studio Bela Vista'})
         self.fields['whatsapp'].widget.attrs.update({'placeholder': '(65) 99999-9999'})
-        self.fields['logo_url'].widget.attrs.update({'placeholder': 'https://seusite.com/logo.png'})
+        self.fields['limite_profissionais'].widget.attrs.update({'placeholder': 'De 1 a 5'})
+        self.fields['logo'].widget.attrs.update({'accept': 'image/*'})
         self.fields['cor_primaria'].widget.attrs.update({'placeholder': '#0f4c81'})
         self.fields['cor_secundaria'].widget.attrs.update({'placeholder': '#188fa7'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        plano = cleaned_data.get('plano')
+        limite = cleaned_data.get('limite_profissionais')
+
+        if plano == Empresa.PLANO_SOLO:
+            cleaned_data['limite_profissionais'] = 1
+        elif plano == Empresa.PLANO_ADMIN_ONLY:
+            cleaned_data['limite_profissionais'] = 5
+        elif plano == Empresa.PLANO_START and not limite:
+            self.add_error('limite_profissionais', 'Informe a quantidade de funcionarios para o plano Start.')
+
+        limite_final = cleaned_data.get('limite_profissionais')
+        if self.instance and limite_final:
+            profissionais_ativos = self.instance.profissional_set.filter(ativo=True).count()
+            if profissionais_ativos > limite_final:
+                self.add_error(
+                    'plano',
+                    f'Nao e possivel aplicar este plano agora: voce possui {profissionais_ativos} profissionais ativos.'
+                )
+
+        return cleaned_data
 
     def clean_tipo(self):
         return normalize_business_type(self.cleaned_data['tipo'])
@@ -166,14 +203,18 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
     def clean_whatsapp(self):
         return ''.join(filter(str.isdigit, self.cleaned_data.get('whatsapp', '')))
 
-    def clean_logo_url(self):
-        return (self.cleaned_data.get('logo_url') or '').strip()
-
     def clean_cor_primaria(self):
         return _normalize_hex_color(self.cleaned_data.get('cor_primaria'))
 
     def clean_cor_secundaria(self):
         return _normalize_hex_color(self.cleaned_data.get('cor_secundaria'))
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.valor_mensal = self.PLAN_PRICES.get(instance.plano, instance.valor_mensal)
+        if commit:
+            instance.save()
+        return instance
 
 
 def parse_profissional_modules_from_post(request_post, profissionais):

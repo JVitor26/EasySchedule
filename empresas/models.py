@@ -31,6 +31,7 @@ class Empresa(models.Model):
     tipo = models.CharField(max_length=50)
     cnpj = models.CharField(max_length=18, blank=True, null=True)
     whatsapp = models.CharField(max_length=20, blank=True, default="")
+    logo = models.ImageField(upload_to="empresas/logos/", blank=True, null=True)
     logo_url = models.URLField(blank=True, default="")
     cor_primaria = models.CharField(max_length=7, blank=True, default="")
     cor_secundaria = models.CharField(max_length=7, blank=True, default="")

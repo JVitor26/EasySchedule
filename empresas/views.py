@@ -19,7 +19,7 @@ from profissionais.models import Profissional
 
 def cadastro_empresa(request):
     if request.method == 'POST':
-        form = CadastroEmpresaForm(request.POST)
+        form = CadastroEmpresaForm(request.POST, request.FILES)
         if form.is_valid():
             email = form.cleaned_data['email']
             senha = form.cleaned_data['senha']
@@ -49,7 +49,7 @@ def cadastro_empresa(request):
                     tipo=form.cleaned_data['tipo_empresa'],
                     cnpj=form.cleaned_data['cpf_cnpj'],
                     whatsapp=form.cleaned_data['whatsapp'],
-                    logo_url=form.cleaned_data['logo_url'],
+                    logo=form.cleaned_data['logo'],
                     cor_primaria=form.cleaned_data['cor_primaria'],
                     cor_secundaria=form.cleaned_data['cor_secundaria'],
                     plano=plano_escolhido,
@@ -115,7 +115,7 @@ def empresa_configuracoes(request):
     )
 
     if request.method == 'POST':
-        form = EmpresaConfiguracaoForm(request.POST, instance=empresa)
+        form = EmpresaConfiguracaoForm(request.POST, request.FILES, instance=empresa)
         if form.is_valid():
             form.save()
 

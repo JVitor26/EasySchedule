@@ -1,8 +1,11 @@
 from datetime import date, time
+from io import BytesIO
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from PIL import Image
 
 from agendamentos.models import Agendamento
 from agendamentos.forms import AgendamentoForm
@@ -193,7 +196,7 @@ class CadastroEmpresaBrandingFieldsTests(TestCase):
         response = self.client.get(reverse("cadastro_empresa"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="id_logo_url"')
+        self.assertContains(response, 'id="id_logo"')
         self.assertContains(response, 'id="id_cor_primaria"')
         self.assertContains(response, 'id="id_cor_secundaria"')
         self.assertContains(response, 'id="id_cor_primaria_picker"')
@@ -241,6 +244,12 @@ class EmpresaConfiguracoesTests(TestCase):
             acessos_modulos=["agendamentos"],
         )
 
+    def _build_png_file(self, filename="logo.png"):
+        image_buffer = BytesIO()
+        Image.new("RGB", (4, 4), color=(15, 76, 129)).save(image_buffer, format="PNG")
+        image_buffer.seek(0)
+        return SimpleUploadedFile(filename, image_buffer.getvalue(), content_type="image/png")
+
     def test_owner_can_update_empresa_and_profissional_modules(self):
         self.client.force_login(self.owner)
 
@@ -250,7 +259,8 @@ class EmpresaConfiguracoesTests(TestCase):
                 "nome": "Studio Premium",
                 "tipo": "manicure",
                 "whatsapp": "(65) 98888-7777",
-                "logo_url": "https://cdn.example.com/new-logo.png",
+                "plano": "start",
+                "limite_profissionais": "5",
                 "cor_primaria": "#0f4c81",
                 "cor_secundaria": "#188fa7",
                 f"acessos_{self.profissional.pk}": [
@@ -268,11 +278,64 @@ class EmpresaConfiguracoesTests(TestCase):
         self.assertEqual(self.empresa.nome, "Studio Premium")
         self.assertEqual(self.empresa.tipo, "manicure")
         self.assertEqual(self.empresa.whatsapp, "65988887777")
-        self.assertEqual(self.empresa.logo_url, "https://cdn.example.com/new-logo.png")
+        self.assertEqual(self.empresa.plano, "start")
+        self.assertEqual(self.empresa.limite_profissionais, 5)
+        self.assertEqual(float(self.empresa.valor_mensal), 147.0)
         self.assertEqual(self.empresa.cor_primaria, "#0f4c81")
         self.assertEqual(self.empresa.cor_secundaria, "#188fa7")
         self.assertIn(PROFISSIONAL_ACCESS_CLIENTES, self.profissional.acessos_modulos)
         self.assertIn(PROFISSIONAL_ACCESS_SERVICOS, self.profissional.acessos_modulos)
+
+    def test_owner_can_upload_logo_file_in_configuracoes(self):
+        self.client.force_login(self.owner)
+        logo_file = self._build_png_file()
+
+        response = self.client.post(
+            reverse("empresa_configuracoes"),
+            {
+                "nome": self.empresa.nome,
+                "tipo": self.empresa.tipo,
+                "whatsapp": self.empresa.whatsapp,
+                "plano": self.empresa.plano,
+                "limite_profissionais": str(self.empresa.limite_profissionais),
+                "cor_primaria": self.empresa.cor_primaria,
+                "cor_secundaria": self.empresa.cor_secundaria,
+                f"acessos_{self.profissional.pk}": self.profissional.acessos_modulos,
+                "logo": logo_file,
+            },
+        )
+
+        self.assertRedirects(response, reverse("empresa_configuracoes"))
+        self.empresa.refresh_from_db()
+        self.assertTrue(bool(self.empresa.logo))
+        self.assertIn("empresas/logos/", self.empresa.logo.name)
+
+    def test_owner_can_upgrade_plano_da_empresa(self):
+        self.empresa.plano = Empresa.PLANO_SOLO
+        self.empresa.limite_profissionais = 1
+        self.empresa.valor_mensal = 97
+        self.empresa.save(update_fields=["plano", "limite_profissionais", "valor_mensal"])
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("empresa_configuracoes"),
+            {
+                "nome": self.empresa.nome,
+                "tipo": self.empresa.tipo,
+                "whatsapp": self.empresa.whatsapp,
+                "plano": Empresa.PLANO_START,
+                "limite_profissionais": "4",
+                "cor_primaria": self.empresa.cor_primaria,
+                "cor_secundaria": self.empresa.cor_secundaria,
+                f"acessos_{self.profissional.pk}": self.profissional.acessos_modulos,
+            },
+        )
+
+        self.assertRedirects(response, reverse("empresa_configuracoes"))
+        self.empresa.refresh_from_db()
+        self.assertEqual(self.empresa.plano, Empresa.PLANO_START)
+        self.assertEqual(self.empresa.limite_profissionais, 4)
+        self.assertEqual(float(self.empresa.valor_mensal), 147.0)
 
     def test_profissional_sem_modulo_clientes_e_bloqueado(self):
         self.profissional.acessos_modulos = ["agendamentos"]

@@ -127,7 +127,7 @@ def _booking_email_theme(profile_key):
 
 
 def _resolve_company_logo_url(empresa):
-    for attr in ("logo_url", "logo", "imagem", "avatar"):
+    for attr in ("logo", "logo_url", "imagem", "avatar"):
         value = getattr(empresa, attr, "")
         if not value:
             continue
