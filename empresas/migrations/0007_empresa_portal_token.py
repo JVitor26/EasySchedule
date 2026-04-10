@@ -4,6 +4,31 @@ import uuid
 from django.db import migrations, models
 
 
+def populate_unique_portal_tokens(apps, schema_editor):
+    Empresa = apps.get_model("empresas", "Empresa")
+
+    used_tokens = set()
+    to_update = []
+
+    # Handles both null tokens and accidental duplicates safely.
+    for empresa in Empresa.objects.order_by("id").only("id", "portal_token"):
+        current_token = empresa.portal_token
+        if current_token and current_token not in used_tokens:
+            used_tokens.add(current_token)
+            continue
+
+        new_token = uuid.uuid4()
+        while new_token in used_tokens:
+            new_token = uuid.uuid4()
+
+        empresa.portal_token = new_token
+        used_tokens.add(new_token)
+        to_update.append(empresa)
+
+    if to_update:
+        Empresa.objects.bulk_update(to_update, ["portal_token"], batch_size=500)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -12,6 +37,12 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
+            model_name="empresa",
+            name="portal_token",
+            field=models.UUIDField(blank=True, db_index=True, editable=False, null=True),
+        ),
+        migrations.RunPython(populate_unique_portal_tokens, migrations.RunPython.noop),
+        migrations.AlterField(
             model_name="empresa",
             name="portal_token",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
