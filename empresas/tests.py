@@ -313,6 +313,26 @@ class EmpresaConfiguracoesTests(TestCase):
         self.assertContains(response, "Apagar conta")
         self.assertContains(response, reverse("empresa_excluir_conta"))
 
+    def test_configuracoes_organiza_campos_por_secao(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("empresa_configuracoes"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="config-cadastro"')
+        self.assertContains(response, "Dados cadastrais")
+        self.assertContains(response, 'id="config-plano"')
+        self.assertContains(response, "Plano e equipe")
+        self.assertContains(response, 'id="config-visual"')
+        self.assertContains(response, "Identidade visual")
+        self.assertContains(response, 'id="config-portal"')
+        self.assertContains(response, "Portal publico")
+        self.assertContains(response, 'id="config-acessos"')
+        self.assertContains(response, "Acessos dos profissionais")
+        self.assertContains(response, 'id="config-conta"')
+        self.assertContains(response, "Conta do sistema")
+        self.assertContains(response, "Login administrador")
+
     def test_excluir_conta_exibe_card_de_confirmacao_irreversivel(self):
         self.client.force_login(self.owner)
 

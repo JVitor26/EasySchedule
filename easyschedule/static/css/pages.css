@@ -125,6 +125,17 @@
     padding: 1.65rem;
 }
 
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+    width: 100%;
+}
+
+.settings-actions {
+    justify-content: flex-end;
+}
+
 .form-card form {
     display: flex;
     flex-direction: column;
