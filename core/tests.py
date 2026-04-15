@@ -63,6 +63,17 @@ class HomepageRoutingTests(TestCase):
         self.assertRedirects(response, reverse("dashboard_home"), fetch_redirect_response=False)
         self.assertContains(response, "Agenda")
 
+    def test_mobile_nav_includes_profissionais_for_company_owner(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("dashboard_home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            response.content.decode(),
+            r'class="app-mobile-link[^"]*" href="/profissionais/">Barbeiros</a>',
+        )
+
 
 class InternalAuthBackendTests(TestCase):
     def setUp(self):

@@ -229,6 +229,7 @@
                 {% if usuario_modulos.clientes %}
                 <a class="app-mobile-link {% if '/pessoa/' in request.path %}is-active{% endif %}" href="{% url 'pessoa_list' %}">{{ business_profile.client_term_plural|default:"Clientes" }}</a>
                 {% endif %}
+                <a class="app-mobile-link {% if '/profissionais/' in request.path %}is-active{% endif %}" href="{% url 'profissionais_list' %}">{{ business_profile.professional_term_plural|default:"Profissionais" }}</a>
                 {% if usuario_modulos.relatorios %}
                 <a class="app-mobile-link {% if '/relatorios/' in request.path %}is-active{% endif %}" href="{% url 'relatorio_page' %}">Relatorios</a>
                 {% endif %}
