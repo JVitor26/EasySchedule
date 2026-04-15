@@ -1107,3 +1107,98 @@ class AISchedulingChatTests(TestCase):
         self.assertEqual(confirmation_payload["acao"], "agendamento_criado")
         self.assertTrue(Agendamento.objects.filter(pk=confirmation_payload["agendamento_id"]).exists())
 
+    def test_ai_chat_identifica_cliente_cadastrado_por_audio(self):
+        cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Marina Cliente",
+            telefone="65988887777",
+            email="marina@example.com",
+            documento="12345678901",
+            data_nascimento=timezone.localdate() - timedelta(days=9000),
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "telefone 65 98888 7777 quero agendar",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["telefone"], cliente.telefone)
+        self.assertTrue(payload["cliente_info"]["cadastrado"])
+        self.assertEqual(payload["cliente_info"]["nome"], "Marina Cliente")
+        self.assertIn("Cliente encontrado: Marina Cliente", payload["resposta"])
+
+    def test_ai_chat_cria_pendente_para_cliente_nao_cadastrado_por_audio(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "telefone 65 97777 1111 cliente Laura Corte completo com Rafael amanhã às 15 horas confirmar",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "agendamento_criado")
+        self.assertFalse(payload["cliente_info"]["cadastrado"])
+        self.assertIn("Cliente nao cadastrado", payload["resposta"])
+
+        agendamento = Agendamento.objects.get(pk=payload["agendamento_id"])
+        self.assertEqual(agendamento.status, "pendente")
+        self.assertEqual(agendamento.cliente.telefone, "65977771111")
+        self.assertEqual(agendamento.cliente.nome, "Laura")
+        self.assertIn("email", agendamento.cliente.campos_cadastro_pendentes())
+
+    def test_confirmar_agendamento_exige_cadastro_completo_do_cliente(self):
+        cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Cliente nao cadastrado",
+            telefone="65977771111",
+        )
+        agendamento = Agendamento.objects.create(
+            empresa=self.empresa,
+            cliente=cliente,
+            servico=self.servico,
+            profissional=self.profissional,
+            data=self.data_agendamento,
+            hora="15:00",
+            status="pendente",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("agendamentos_status", args=[agendamento.id]),
+            data=json.dumps({"status": "confirmado"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.json()
+        self.assertTrue(payload["requires_review"])
+        self.assertIn(reverse("pessoa_edit", args=[cliente.id]), payload["review_url"])
+
+        edit_response = self.client.post(
+            f"{reverse('pessoa_edit', args=[cliente.id])}?confirm_agendamento={agendamento.id}&next=dashboard_home",
+            data={
+                "nome": "Laura Cliente",
+                "email": "laura@example.com",
+                "telefone": cliente.telefone,
+                "documento": "12345678901",
+                "data_nascimento": "2000-01-01",
+                "endereco": "",
+                "observacoes": "",
+            },
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        agendamento.refresh_from_db()
+        cliente.refresh_from_db()
+        self.assertTrue(cliente.cadastro_completo)
+        self.assertEqual(agendamento.status, "confirmado")
+

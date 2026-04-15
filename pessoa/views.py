@@ -9,6 +9,7 @@ from empresas.permissions import (
     PROFISSIONAL_ACCESS_CLIENTES,
     user_can_access_module,
 )
+from agendamentos.models import Agendamento
 
 @login_required
 def pessoa_list(request):
@@ -50,6 +51,24 @@ def pessoa_form(request, pk=None):
             pessoa = form.save(commit=False)
             pessoa.empresa = empresa
             pessoa.save()
+
+            confirm_agendamento_id = request.GET.get('confirm_agendamento')
+            if confirm_agendamento_id:
+                agendamento = Agendamento.objects.filter(
+                    pk=confirm_agendamento_id,
+                    empresa=empresa,
+                    cliente=pessoa,
+                    status='pendente',
+                ).first()
+                if agendamento and pessoa.cadastro_completo:
+                    agendamento.status = 'confirmado'
+                    agendamento.save(update_fields=['status'])
+                    messages.success(request, 'Cadastro completo e agendamento confirmado.')
+                    next_target = request.GET.get('next') or 'dashboard_home'
+                    if next_target not in {'dashboard_home', 'agendamentos_list'}:
+                        next_target = 'dashboard_home'
+                    return redirect(next_target)
+
             return redirect('pessoa_list')
     else:
         form = PessoaForm(instance=pessoa, empresa=empresa)

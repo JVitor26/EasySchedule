@@ -1845,6 +1845,8 @@ def ai_scheduling_chat_api(request, portal_token):
         "acao": result.get("acao"),
         "contexto": result.get("contexto", {}),
         "agendamento_id": result.get("agendamento_id"),
+        "telefone": result.get("telefone", telefone),
+        "cliente_info": result.get("cliente_info", {}),
     })
 
 
@@ -1868,8 +1870,6 @@ def ai_scheduling_dashboard_api(request):
 
     if not mensagem:
         return JsonResponse({"status": "erro", "message": "Mensagem obrigatoria."}, status=400)
-    if not telefone:
-        return JsonResponse({"status": "erro", "message": "Informe o telefone do cliente."}, status=400)
 
     result = handle_ai_scheduling_message(
         empresa=empresa,
@@ -1896,5 +1896,7 @@ def ai_scheduling_dashboard_api(request):
         "acao": result.get("acao"),
         "contexto": result.get("contexto", {}),
         "agendamento_id": result.get("agendamento_id"),
+        "telefone": result.get("telefone", telefone),
+        "cliente_info": result.get("cliente_info", {}),
     })
 

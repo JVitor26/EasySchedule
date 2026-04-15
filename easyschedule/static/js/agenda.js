@@ -47,6 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
         modalValor: document.getElementById("modalValor"),
         modalStatus: document.getElementById("modalStatus"),
         modalTelefone: document.getElementById("modalTelefone"),
+        modalCadastroStatus: document.getElementById("modalCadastroStatus"),
         modalObservacoes: document.getElementById("modalObservacoes"),
         modalEditarLink: document.getElementById("modalEditarLink"),
         fecharModal: document.getElementById("fecharModal"),
@@ -62,6 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
         aiChatFeedback: document.getElementById("aiChatFeedback"),
         aiChatMessages: document.getElementById("aiChatMessages"),
         aiChatSuggestions: document.getElementById("aiChatSuggestions"),
+        aiClientInfo: document.getElementById("aiClientInfo"),
     };
 
     const moneyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -103,6 +105,36 @@ document.addEventListener("DOMContentLoaded", () => {
         node.textContent = text;
         elements.aiChatMessages.appendChild(node);
         elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+    }
+
+    function renderClientInfo(info) {
+        if (!elements.aiClientInfo || !info || !info.telefone) {
+            if (elements.aiClientInfo) {
+                elements.aiClientInfo.hidden = true;
+                elements.aiClientInfo.textContent = "";
+            }
+            return;
+        }
+
+        const pending = info.campos_pendentes || [];
+        elements.aiClientInfo.hidden = false;
+        elements.aiClientInfo.classList.toggle("is-missing", !info.cadastrado || pending.length > 0);
+        elements.aiClientInfo.textContent = "";
+
+        const title = document.createElement("strong");
+        const detail = document.createElement("span");
+
+        if (info.cadastrado) {
+            const pendingText = pending.length ? `Pendencias: ${pending.join(", ")}.` : "Cadastro completo.";
+            title.textContent = `Cliente encontrado: ${info.nome}`;
+            detail.textContent = pendingText;
+        } else {
+            title.textContent = "Cliente nao cadastrado";
+            detail.textContent = "O horario sera criado como pendente para completar o cadastro antes da confirmacao.";
+        }
+
+        elements.aiClientInfo.appendChild(title);
+        elements.aiClientInfo.appendChild(detail);
     }
 
     let aiContext = {};
@@ -203,12 +235,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            if (!(elements.aiChatPhone?.value || "").trim()) {
-                setVoiceStatus("Audio transcrito. Informe o telefone e envie.");
-                setAiFeedback("Informe o telefone do cliente.", "is-error");
-                return;
-            }
-
             setVoiceStatus("Audio transcrito. Enviando para a IA...");
             sendAiMessage();
         };
@@ -241,10 +267,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!aiChatUrl) return;
         const telefone = (elements.aiChatPhone?.value || "").trim();
         const mensagem = (elements.aiChatInput?.value || "").trim();
-        if (!telefone) {
-            setAiFeedback("Informe o telefone do cliente.", "is-error");
-            return;
-        }
         if (!mensagem) return;
 
         appendAiMessage(mensagem, "user");
@@ -266,6 +288,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw new Error(payload.message || "Falha ao falar com a IA.");
             }
             aiContext = payload.contexto || {};
+            if (payload.telefone && elements.aiChatPhone) {
+                elements.aiChatPhone.value = payload.telefone;
+            }
+            renderClientInfo(payload.cliente_info);
             appendAiMessage(payload.resposta || "Sem resposta da IA.", "bot");
             renderAiSuggestions(payload.sugestoes || []);
             if (payload.agendamento_id) {
@@ -380,6 +406,12 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.modalValor.textContent = moneyFormatter.format(Number(props.valor) || 0);
         elements.modalStatus.textContent = props.status_label || "-";
         elements.modalTelefone.textContent = props.telefone || "-";
+        if (elements.modalCadastroStatus) {
+            const camposPendentes = props.campos_cadastro_pendentes || [];
+            elements.modalCadastroStatus.textContent = props.cadastro_incompleto
+                ? `Pendente: ${camposPendentes.join(", ")}`
+                : "Completo";
+        }
         elements.modalObservacoes.textContent = props.observacoes || "Sem observacoes informadas.";
         if (isProductEvent) {
             elements.modalEditarLink.style.display = "none";
@@ -566,6 +598,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
 
                 const payload = await response.json();
+                if (payload.requires_review && payload.review_url) {
+                    setFeedback(payload.mensagem || "Complete os dados do cliente antes de confirmar.", "is-error");
+                    window.location.href = payload.review_url;
+                    return;
+                }
+
                 if (!response.ok || payload.status !== "ok") {
                     throw new Error(payload.mensagem || "Erro ao atualizar status.");
                 }

@@ -21,6 +21,26 @@ class Pessoa(models.Model):
     def __str__(self):
         return self.nome
 
+    def campos_cadastro_pendentes(self):
+        campos = []
+        nome_normalizado = (self.nome or "").strip().lower()
+        nomes_temporarios = {"cliente ia", "cliente nao cadastrado", "cliente não cadastrado"}
+
+        if not nome_normalizado or nome_normalizado in nomes_temporarios:
+            campos.append("nome")
+        if not self.email:
+            campos.append("email")
+        if not self.documento:
+            campos.append("documento")
+        if not self.data_nascimento:
+            campos.append("data de nascimento")
+
+        return campos
+
+    @property
+    def cadastro_completo(self):
+        return not self.campos_cadastro_pendentes()
+
     # 📅 DATA FORMATADA
     def data_nascimento_br(self):
         if self.data_nascimento:

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from .models import Agendamento, PlanoMensal
@@ -256,6 +257,7 @@ def agendamentos_api(request):
         for ag in queryset:
             inicio = datetime.combine(ag.data, ag.hora)
             termino = inicio + timedelta(minutes=ag.servico.tempo or 30)
+            campos_cadastro_pendentes = ag.cliente.campos_cadastro_pendentes()
             eventos.append({
                 'id': ag.id,
                 'title': f'{ag.cliente.nome} - {ag.servico.nome}',
@@ -273,6 +275,9 @@ def agendamentos_api(request):
                     'status': ag.status,
                     'status_label': ag.get_status_display(),
                     'telefone': ag.cliente.telefone,
+                    'cliente_id': ag.cliente_id,
+                    'cadastro_incompleto': bool(campos_cadastro_pendentes),
+                    'campos_cadastro_pendentes': campos_cadastro_pendentes,
                     'observacoes': ag.observacoes or '',
                 }
             })
@@ -446,6 +451,24 @@ def atualizar_status_agendamento(request, pk):
             'status': 'erro',
             'mensagem': f'Transição inválida de "{agendamento.status}" para "{novo_status}".',
         }, status=400)
+
+    if novo_status == 'confirmado':
+        campos_pendentes = agendamento.cliente.campos_cadastro_pendentes()
+        if campos_pendentes:
+            review_url = (
+                f"{reverse('pessoa_edit', args=[agendamento.cliente_id])}"
+                f"?confirm_agendamento={agendamento.id}&next=dashboard_home"
+            )
+            return JsonResponse({
+                'status': 'erro',
+                'requires_review': True,
+                'review_url': review_url,
+                'campos_pendentes': campos_pendentes,
+                'mensagem': (
+                    'Complete o cadastro do cliente antes de confirmar. '
+                    f"Pendencias: {', '.join(campos_pendentes)}."
+                ),
+            }, status=409)
 
     agendamento.status = novo_status
     agendamento.save(update_fields=['status'])

@@ -335,6 +335,27 @@
     line-height: 1.5;
 }
 
+.ai-client-info {
+    margin-top: 0.9rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--text-2);
+    line-height: 1.55;
+}
+
+.ai-client-info strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-1);
+}
+
+.ai-client-info.is-missing {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
 .ai-chat-messages {
     display: flex;
     flex-direction: column;

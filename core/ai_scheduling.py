@@ -14,12 +14,93 @@ from profissionais.models import Profissional
 from servicos.models import Servico
 
 
+PHONE_WORDS = {
+    "zero": "0",
+    "um": "1",
+    "uma": "1",
+    "dois": "2",
+    "duas": "2",
+    "tres": "3",
+    "treis": "3",
+    "quatro": "4",
+    "cinco": "5",
+    "seis": "6",
+    "meia": "6",
+    "sete": "7",
+    "oito": "8",
+    "nove": "9",
+}
+
+
 def _normalize_text(value):
     normalized = unicodedata.normalize("NFKD", value or "")
     without_accents = "".join(
         char for char in normalized if not unicodedata.combining(char)
     )
     return re.sub(r"\s+", " ", without_accents.strip().lower())
+
+
+def _only_digits(value):
+    return re.sub(r"\D", "", value or "")
+
+
+def _clean_phone_candidate(value):
+    digits = _only_digits(value)
+    if len(digits) < 10:
+        return ""
+    if len(digits) > 11:
+        digits = digits[-11:]
+    return digits
+
+
+def _extract_phone_from_text(text):
+    raw_text = text or ""
+    direct_matches = re.findall(r"(?:\d[\s().-]*){10,13}", raw_text)
+    for match in direct_matches:
+        candidate = _clean_phone_candidate(match)
+        if candidate:
+            return candidate
+
+    lowered = _normalize_text(raw_text)
+    marker_match = re.search(r"\b(?:telefone|whatsapp|zap|celular|fone|numero)\b", lowered)
+    segment = lowered[marker_match.end():] if marker_match else lowered
+    tokens = re.findall(r"\d+|[a-z]+", segment)
+    digits = []
+
+    for token in tokens:
+        if token.isdigit():
+            digits.extend(list(token))
+        elif token in PHONE_WORDS:
+            digits.append(PHONE_WORDS[token])
+        elif token == "e" and digits:
+            continue
+        elif digits:
+            break
+
+        if len(digits) >= 11:
+            break
+
+    return _clean_phone_candidate("".join(digits))
+
+
+def _parse_cliente_name(text):
+    lowered = _normalize_text(text)
+    match = re.search(r"\b(?:cliente|nome)\s+([a-z ]{2,80})", lowered)
+    if not match:
+        return ""
+
+    name = match.group(1)
+    stop_match = re.search(
+        r"\b(?:telefone|whatsapp|zap|celular|fone|servico|serviço|corte|barba|unha|massagem|sobrancelha|com|hoje|amanha|dia|data|as|horas?)\b",
+        name,
+    )
+    if stop_match:
+        name = name[:stop_match.start()]
+
+    name = re.sub(r"\s+", " ", name).strip(" .:-")
+    if len(name) < 2:
+        return ""
+    return name[:80].title()
 
 
 def _parse_date_from_text(text):
@@ -126,20 +207,66 @@ def _filter_slots_by_period(slot_values, period):
     return filtered
 
 
+def _cliente_info(cliente=None, telefone="", cadastrado=False):
+    if cliente:
+        return {
+            "cadastrado": cadastrado,
+            "id": cliente.id,
+            "nome": cliente.nome,
+            "telefone": cliente.telefone,
+            "email": cliente.email,
+            "documento": cliente.documento_formatado(),
+            "campos_pendentes": cliente.campos_cadastro_pendentes(),
+        }
+
+    return {
+        "cadastrado": False,
+        "id": None,
+        "nome": "",
+        "telefone": telefone,
+        "email": "",
+        "documento": "",
+        "campos_pendentes": ["cadastro do cliente"],
+    }
+
+
+def _cliente_status_prefix(cliente_info, announced=False):
+    if announced or not cliente_info or not cliente_info.get("telefone"):
+        return ""
+
+    if cliente_info.get("cadastrado"):
+        pendentes = cliente_info.get("campos_pendentes") or []
+        if pendentes:
+            return (
+                f"Cliente encontrado: {cliente_info['nome']}. "
+                f"Cadastro com pendencias: {', '.join(pendentes)}. "
+            )
+        return f"Cliente encontrado: {cliente_info['nome']}. "
+
+    return "Cliente nao cadastrado. Vou deixar o agendamento como pendente para completar o cadastro antes da confirmacao. "
+
+
+def _with_prefix(response, prefix):
+    if prefix:
+        response["resposta"] = f"{prefix}{response['resposta']}"
+    return response
+
+
 def _upsert_cliente(empresa, telefone, nome):
     cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
     if cliente:
-        if nome and cliente.nome != nome:
+        if nome and not cliente.nome:
             cliente.nome = nome
             cliente.save(update_fields=["nome"])
-        return cliente
+        return cliente, True
     return Pessoa.objects.create(
         empresa=empresa,
-        nome=nome or "Cliente IA",
+        nome=nome or "Cliente nao cadastrado",
         telefone=telefone,
         email="",
         documento="",
-    )
+        observacoes="Cadastro criado automaticamente pelo assistente de agendamento por audio.",
+    ), False
 
 
 def _build_service_suggestions(empresa):
@@ -154,19 +281,42 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
     context = dict(contexto or {})
     booking = dict(context.get("booking") or {})
     text = _normalize_text(mensagem)
+    telefone = _clean_phone_candidate(telefone) or booking.get("telefone") or _extract_phone_from_text(mensagem)
 
     if not telefone:
+        context["booking"] = booking
         return {
-            "resposta": "Envie seu telefone para continuar o agendamento.",
+            "resposta": "Fale ou digite o telefone do cliente para continuar o agendamento.",
             "contexto": context,
             "sugestoes": [],
             "acao": "pedir_telefone",
+            "telefone": "",
+            "cliente_info": _cliente_info(),
         }
 
-    if "nome " in f" {text} " and not booking.get("nome_cliente"):
-        possible_name = text.split("nome", 1)[-1].strip(" :.-")
-        if possible_name:
-            booking["nome_cliente"] = possible_name[:80].title()
+    booking["telefone"] = telefone
+
+    possible_name = _parse_cliente_name(mensagem)
+    if possible_name and not booking.get("nome_cliente"):
+        booking["nome_cliente"] = possible_name
+
+    cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
+    cliente_cadastrado = cliente is not None
+    if cliente:
+        booking["cliente_id"] = cliente.id
+        booking["nome_cliente"] = cliente.nome
+
+    cliente_info = _cliente_info(cliente, telefone=telefone, cadastrado=cliente_cadastrado)
+    prefix = _cliente_status_prefix(cliente_info, booking.get("cliente_status_informado"))
+    if prefix:
+        booking["cliente_status_informado"] = True
+
+    def finish(response):
+        context["booking"] = booking
+        response["contexto"] = context
+        response["telefone"] = telefone
+        response["cliente_info"] = cliente_info
+        return _with_prefix(response, prefix)
 
     servico = None
     if booking.get("servico_id"):
@@ -210,43 +360,35 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
         )
     )
     if not booking.get("servico_id"):
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": "Qual servico voce quer agendar?",
-            "contexto": context,
             "sugestoes": _build_service_suggestions(empresa),
             "acao": "pedir_servico",
-        }
+        })
 
     if not booking.get("profissional_id"):
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": "Com qual profissional voce prefere agendar?",
-            "contexto": context,
             "sugestoes": _build_profissional_suggestions(empresa),
             "acao": "pedir_profissional",
-        }
+        })
 
     if not booking.get("data"):
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": "Qual data voce quer? (ex.: amanha, 15/04 ou 2026-04-15)",
-            "contexto": context,
             "sugestoes": ["hoje", "amanha"],
             "acao": "pedir_data",
-        }
+        })
 
     try:
         selected_date = forms.DateField().clean(booking["data"])
     except ValidationError:
         booking.pop("data", None)
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": "Nao entendi a data. Envie no formato 15/04, amanha ou 2026-04-15.",
-            "contexto": context,
             "sugestoes": ["amanha"],
             "acao": "pedir_data",
-        }
+        })
     slots = list_available_slots(
         empresa=empresa,
         profissional=profissional,
@@ -257,13 +399,11 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
 
     filtered_values = _filter_slots_by_period(slot_values, booking.get("periodo", ""))
     if not filtered_values:
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": "Nao achei horarios livres nessa data. Quer tentar outro dia?",
-            "contexto": context,
             "sugestoes": [],
             "acao": "sem_horario",
-        }
+        })
 
     selected_time = booking.get("hora")
     if selected_time and selected_time not in filtered_values:
@@ -271,28 +411,24 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
         selected_time = None
 
     if not selected_time:
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": (
                 f"Tenho horarios para {selected_date.strftime('%d/%m/%Y')}. "
                 "Escolha um horario e eu confirmo para voce."
             ),
-            "contexto": context,
             "sugestoes": filtered_values[:6],
             "acao": "pedir_horario",
-        }
+        })
 
     if not wants_confirm:
-        context["booking"] = booking
-        return {
+        return finish({
             "resposta": (
                 f"Confirma o agendamento de {servico.nome} com {profissional.nome} "
                 f"em {selected_date.strftime('%d/%m/%Y')} as {selected_time}?"
             ),
-            "contexto": context,
             "sugestoes": ["confirmar", "trocar horario"],
             "acao": "confirmar_agendamento",
-        }
+        })
 
     with transaction.atomic():
         acquire_schedule_lock(empresa=empresa, profissional=profissional, data=selected_date)
@@ -304,15 +440,13 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
         )
         slot_values_now = [slot.strftime("%H:%M") for slot in slots_now]
         if selected_time not in slot_values_now:
-            context["booking"] = booking
-            return {
+            return finish({
                 "resposta": "Esse horario acabou de ficar indisponivel. Escolha outro.",
-                "contexto": context,
                 "sugestoes": slot_values_now[:6],
                 "acao": "horario_indisponivel",
-            }
+            })
 
-        cliente = _upsert_cliente(empresa, telefone, booking.get("nome_cliente") or "Cliente IA")
+        cliente, cliente_cadastrado = _upsert_cliente(empresa, telefone, booking.get("nome_cliente"))
         agendamento = Agendamento(
             empresa=empresa,
             cliente=cliente,
@@ -328,14 +462,22 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
         agendamento.full_clean()
         agendamento.save()
 
+    cliente_info = _cliente_info(cliente, telefone=telefone, cadastrado=cliente_cadastrado)
+    pendencias = cliente_info.get("campos_pendentes") or []
+    pendencia_texto = ""
+    if pendencias:
+        pendencia_texto = f" Antes de confirmar, complete: {', '.join(pendencias)}."
+
     context["booking"] = {}
-    return {
+    return _with_prefix({
         "resposta": (
-            f"Agendamento confirmado: {servico.nome} com {profissional.nome} "
-            f"em {selected_date.strftime('%d/%m/%Y')} as {selected_time}."
+            f"Agendamento criado como pendente: {servico.nome} com {profissional.nome} "
+            f"em {selected_date.strftime('%d/%m/%Y')} as {selected_time}.{pendencia_texto}"
         ),
         "contexto": context,
         "sugestoes": [],
         "acao": "agendamento_criado",
         "agendamento_id": agendamento.id,
-    }
+        "telefone": telefone,
+        "cliente_info": cliente_info,
+    }, prefix)

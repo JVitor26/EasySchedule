@@ -43,20 +43,21 @@
       <div class="agenda-card-header">
         <div>
           <h2>Agendar por texto ou audio</h2>
-          <p>Digite ou grave o pedido do cliente aqui mesmo. Use o cadastro detalhado só quando precisar de algo mais especifico.</p>
+          <p>Fale telefone, cliente, servico, profissional, data e horario no mesmo audio. Use o cadastro detalhado só quando precisar de algo mais especifico.</p>
         </div>
         <a class="btn-secondary" href="{% url 'agendamentos_form' %}">Cadastro detalhado</a>
       </div>
       <div class="ai-chat-grid">
         <div class="agenda-filter-field">
-          <label for="aiChatPhone">Telefone do cliente</label>
+          <label for="aiChatPhone">Telefone do cliente, se quiser digitar</label>
           <input id="aiChatPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(65) 99999-9999">
         </div>
         <div class="ai-chat-example">
           <strong>Pedido rapido</strong>
-          <span>Corte com Rafael amanha as 15 horas</span>
+          <span>Telefone 65 99999 1111, cliente Maria, corte com Rafael amanha as 15 horas</span>
         </div>
       </div>
+      <div id="aiClientInfo" class="ai-client-info" hidden></div>
       <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite"></div>
       <div id="aiChatSuggestions" class="ai-chat-suggestions"></div>
       <div class="ai-chat-compose">
@@ -325,6 +326,10 @@
       <div>
         <span class="modal-label">Telefone</span>
         <strong id="modalTelefone">-</strong>
+      </div>
+      <div>
+        <span class="modal-label">Cadastro</span>
+        <strong id="modalCadastroStatus">-</strong>
       </div>
       <div class="modal-notes">
         <span class="modal-label">Observacoes</span>
