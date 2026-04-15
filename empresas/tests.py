@@ -11,6 +11,7 @@ from agendamentos.models import Agendamento
 from agendamentos.forms import AgendamentoForm
 from empresas.models import Empresa
 from pessoa.models import Pessoa
+from produtos.models import Produto, VendaProduto
 from profissionais.forms import ProfissionalForm
 from profissionais.models import Profissional
 from servicos.forms import ServicoForm
@@ -303,6 +304,25 @@ class EmpresaConfiguracoesTests(TestCase):
         image_buffer.seek(0)
         return SimpleUploadedFile(filename, image_buffer.getvalue(), content_type="image/png")
 
+    def test_configuracoes_exibe_botao_para_apagar_conta(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("empresa_configuracoes"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Apagar conta")
+        self.assertContains(response, reverse("empresa_excluir_conta"))
+
+    def test_excluir_conta_exibe_card_de_confirmacao_irreversivel(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("empresa_excluir_conta"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Acao irreversivel")
+        self.assertContains(response, "nao tem volta")
+        self.assertContains(response, "Sim, apagar minha conta")
+
     def test_owner_can_update_empresa_and_profissional_modules(self):
         self.client.force_login(self.owner)
 
@@ -419,3 +439,73 @@ class EmpresaConfiguracoesTests(TestCase):
         self.assertContains(response, "https://cdn.example.com/old-logo.png")
         self.assertContains(response, 'data-company-primary="#2255aa"')
         self.assertContains(response, 'data-company-secondary="#11aa88"')
+
+    def test_owner_can_delete_full_company_account(self):
+        cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Cliente Excluir",
+            email="cliente.excluir@example.com",
+            telefone="65999990001",
+            documento="11111111111",
+            data_nascimento=date(1990, 1, 1),
+        )
+        servico = Servico.objects.create(
+            empresa=self.empresa,
+            nome="Corte completo",
+            categoria="Cabelo",
+            preco=80,
+            tempo=60,
+        )
+        produto = Produto.objects.create(
+            empresa=self.empresa,
+            nome="Pomada",
+            preco=40,
+            valor_venda=50,
+            estoque=3,
+        )
+        venda = VendaProduto.objects.create(
+            empresa=self.empresa,
+            produto=produto,
+            cliente=cliente,
+            valor_venda=50,
+            data_venda=date(2026, 4, 15),
+        )
+
+        owner_id = self.owner.pk
+        prof_user_id = self.prof_user.pk
+        empresa_id = self.empresa.pk
+
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("empresa_excluir_conta"))
+
+        self.assertRedirects(response, reverse("login"), fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertFalse(Empresa.objects.filter(pk=empresa_id).exists())
+        self.assertFalse(User.objects.filter(pk__in=[owner_id, prof_user_id]).exists())
+        self.assertFalse(Pessoa.objects.filter(pk=cliente.pk).exists())
+        self.assertFalse(Servico.objects.filter(pk=servico.pk).exists())
+        self.assertFalse(VendaProduto.objects.filter(pk=venda.pk).exists())
+        self.assertFalse(Produto.objects.filter(pk=produto.pk).exists())
+
+    def test_profissional_nao_pode_apagar_conta_da_empresa(self):
+        self.client.force_login(self.prof_user)
+
+        response = self.client.post(reverse("empresa_excluir_conta"))
+
+        self.assertRedirects(response, reverse("dashboard_home"))
+        self.assertTrue(Empresa.objects.filter(pk=self.empresa.pk).exists())
+        self.assertEqual(User.objects.filter(pk__in=[self.owner.pk, self.prof_user.pk]).count(), 2)
+
+    def test_admin_global_nao_apaga_conta_de_outro_dono(self):
+        admin = User.objects.create_superuser(
+            username="admin-global@example.com",
+            email="admin-global@example.com",
+            password="senha-forte-123",
+        )
+
+        self.client.force_login(admin)
+        response = self.client.post(reverse("empresa_excluir_conta"))
+
+        self.assertRedirects(response, reverse("empresa_configuracoes"))
+        self.assertTrue(Empresa.objects.filter(pk=self.empresa.pk).exists())
+        self.assertTrue(User.objects.filter(pk=self.owner.pk).exists())

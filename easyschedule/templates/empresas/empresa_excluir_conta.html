@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Apagar conta{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/pages.css' %}">
+
+<section class="page-container confirm-shell">
+  <div class="confirm-card">
+    <p class="confirm-eyebrow">Acao irreversivel</p>
+    <h1 class="confirm-title">Apagar conta</h1>
+    <p class="confirm-copy">
+      Voce esta prestes a apagar <strong>{{ empresa.nome }}</strong>. Depois de confirmar, nao tem volta:
+      o login administrador, logins dos profissionais, servicos, clientes, agendamentos, produtos,
+      relatorios e configuracoes serao removidos definitivamente.
+    </p>
+    <span class="confirm-highlight">{{ empresa.nome }}</span>
+
+    <form method="post" class="confirm-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Sim, apagar minha conta</button>
+      <a href="{% url 'empresa_configuracoes' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+  </div>
+</section>
+{% endblock %}

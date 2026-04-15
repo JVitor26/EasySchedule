@@ -230,6 +230,17 @@
       <a href="{% url 'dashboard_home' %}" class="btn btn-secondary">Cancelar</a>
     </div>
   </form>
+
+  <section class="page-card">
+    <div class="page-card-header">
+      <div>
+        <h2>Apagar conta</h2>
+        <p>Remove a empresa, logins vinculados, clientes, servicos, profissionais, agendamentos, produtos, relatorios e configuracoes.</p>
+      </div>
+      <a href="{% url 'empresa_excluir_conta' %}" class="btn btn-danger">Apagar conta</a>
+    </div>
+    <p class="field-help">Antes de apagar, voce ainda vera uma confirmacao avisando que esta acao nao tem volta.</p>
+  </section>
 </section>
 
 <script src="{% static 'js/empresa_configuracoes.js' %}"></script>
