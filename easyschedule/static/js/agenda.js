@@ -4,7 +4,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
-    if (typeof window.FullCalendar === "undefined") {
+    const hasFullCalendar = typeof window.FullCalendar !== "undefined";
+    if (!hasFullCalendar) {
         const calendarEl = document.getElementById("calendar");
         if (calendarEl) {
             calendarEl.innerHTML =
@@ -12,19 +13,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 "Não foi possível carregar o calendário. Verifique sua conexão e recarregue a página." +
                 "</p>";
         }
-        return;
     }
 
     const eventsUrl = agendaPage.dataset.eventsUrl;
     const moveUrlTemplate = agendaPage.dataset.moveUrlTemplate;
     const editUrlTemplate = agendaPage.dataset.editUrlTemplate;
     const statusUrlTemplate = agendaPage.dataset.statusUrlTemplate;
+    const remindersUrl = agendaPage.dataset.remindersUrl;
+    const reengagementUrl = agendaPage.dataset.reengagementUrl;
+    const aiChatUrl = agendaPage.dataset.aiChatUrl;
+    const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     const STATUS_TRANSITIONS = {
         pendente: ["confirmado", "cancelado"],
-        confirmado: ["finalizado", "cancelado"],
+        confirmado: ["finalizado", "cancelado", "no_show"],
         finalizado: [],
         cancelado: [],
+        no_show: [],
     };
 
     const elements = {
@@ -47,6 +52,16 @@ document.addEventListener("DOMContentLoaded", () => {
         fecharModal: document.getElementById("fecharModal"),
         modalFecharAcao: document.getElementById("modalFecharAcao"),
         calendar: document.getElementById("calendar"),
+        campaignFeedback: document.getElementById("campaignFeedback"),
+        dispararReengajamentoBtn: document.getElementById("dispararReengajamentoBtn"),
+        aiChatPhone: document.getElementById("aiChatPhone"),
+        aiChatInput: document.getElementById("aiChatInput"),
+        aiChatSendBtn: document.getElementById("aiChatSendBtn"),
+        aiChatVoiceBtn: document.getElementById("aiChatVoiceBtn"),
+        aiChatVoiceStatus: document.getElementById("aiChatVoiceStatus"),
+        aiChatFeedback: document.getElementById("aiChatFeedback"),
+        aiChatMessages: document.getElementById("aiChatMessages"),
+        aiChatSuggestions: document.getElementById("aiChatSuggestions"),
     };
 
     const moneyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -60,6 +75,209 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (state) {
             elements.feedback.classList.add(state);
+        }
+    }
+
+    function setCampaignFeedback(message, state = "") {
+        if (!elements.campaignFeedback) {
+            return;
+        }
+        elements.campaignFeedback.textContent = message;
+        elements.campaignFeedback.classList.remove("is-loading", "is-error", "is-success");
+        if (state) {
+            elements.campaignFeedback.classList.add(state);
+        }
+    }
+
+    function setAiFeedback(message, state = "") {
+        if (!elements.aiChatFeedback) return;
+        elements.aiChatFeedback.textContent = message || "";
+        elements.aiChatFeedback.classList.remove("is-loading", "is-error", "is-success");
+        if (state) elements.aiChatFeedback.classList.add(state);
+    }
+
+    function appendAiMessage(text, role) {
+        if (!elements.aiChatMessages) return;
+        const node = document.createElement("div");
+        node.className = `ai-chat-message ${role}`;
+        node.textContent = text;
+        elements.aiChatMessages.appendChild(node);
+        elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+    }
+
+    let aiContext = {};
+    let voiceRecognition = null;
+    let voiceIsListening = false;
+    let voiceHadError = false;
+    let voiceTranscript = "";
+
+    function setVoiceStatus(message = "", isListening = false) {
+        if (elements.aiChatVoiceStatus) {
+            elements.aiChatVoiceStatus.textContent = message;
+        }
+        if (elements.aiChatVoiceBtn) {
+            elements.aiChatVoiceBtn.textContent = isListening ? "Parar audio" : "Gravar audio";
+            elements.aiChatVoiceBtn.setAttribute("aria-pressed", isListening ? "true" : "false");
+            elements.aiChatVoiceBtn.classList.toggle("is-listening", isListening);
+        }
+    }
+
+    function renderAiSuggestions(suggestions) {
+        if (!elements.aiChatSuggestions) return;
+        elements.aiChatSuggestions.innerHTML = "";
+        (suggestions || []).slice(0, 8).forEach((item) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "ai-chat-suggestion";
+            btn.textContent = item;
+            btn.addEventListener("click", () => {
+                if (elements.aiChatInput) elements.aiChatInput.value = item;
+                sendAiMessage();
+            });
+            elements.aiChatSuggestions.appendChild(btn);
+        });
+    }
+
+    function getVoiceRecognition() {
+        if (!SpeechRecognitionConstructor) {
+            return null;
+        }
+
+        if (voiceRecognition) {
+            return voiceRecognition;
+        }
+
+        voiceRecognition = new SpeechRecognitionConstructor();
+        voiceRecognition.lang = "pt-BR";
+        voiceRecognition.continuous = false;
+        voiceRecognition.interimResults = true;
+
+        voiceRecognition.onstart = () => {
+            voiceHadError = false;
+            voiceIsListening = true;
+            voiceTranscript = "";
+            if (elements.aiChatInput) {
+                elements.aiChatInput.value = "";
+            }
+            setAiFeedback("");
+            setVoiceStatus("Ouvindo o pedido do cliente...", true);
+        };
+
+        voiceRecognition.onresult = (event) => {
+            let interimTranscript = "";
+
+            for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                const transcript = event.results[index][0]?.transcript || "";
+                if (event.results[index].isFinal) {
+                    voiceTranscript += ` ${transcript}`;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            const message = `${voiceTranscript} ${interimTranscript}`.trim();
+            if (message && elements.aiChatInput) {
+                elements.aiChatInput.value = message;
+            }
+        };
+
+        voiceRecognition.onerror = (event) => {
+            voiceHadError = true;
+            const message = event.error === "no-speech"
+                ? "Nao ouvi nada. Tente gravar novamente ou digite o pedido."
+                : "Nao consegui usar o audio agora. Digite o pedido para continuar.";
+            setAiFeedback(message, "is-error");
+        };
+
+        voiceRecognition.onend = () => {
+            voiceIsListening = false;
+            setVoiceStatus("", false);
+
+            if (voiceHadError) {
+                return;
+            }
+
+            const message = (elements.aiChatInput?.value || "").trim();
+            if (!message) {
+                setAiFeedback("Nao ouvi nada. Tente gravar novamente ou digite o pedido.", "is-error");
+                return;
+            }
+
+            if (!(elements.aiChatPhone?.value || "").trim()) {
+                setVoiceStatus("Audio transcrito. Informe o telefone e envie.");
+                setAiFeedback("Informe o telefone do cliente.", "is-error");
+                return;
+            }
+
+            setVoiceStatus("Audio transcrito. Enviando para a IA...");
+            sendAiMessage();
+        };
+
+        return voiceRecognition;
+    }
+
+    function toggleVoiceScheduling() {
+        const recognition = getVoiceRecognition();
+        if (!recognition) {
+            setAiFeedback("Agendamento por audio indisponivel neste navegador. Use a mensagem escrita.", "is-error");
+            return;
+        }
+
+        if (voiceIsListening) {
+            recognition.stop();
+            return;
+        }
+
+        try {
+            recognition.start();
+        } catch (error) {
+            setAiFeedback("Nao consegui iniciar o audio. Tente novamente ou use o texto.", "is-error");
+        }
+    }
+
+    let calendar = null;
+
+    async function sendAiMessage() {
+        if (!aiChatUrl) return;
+        const telefone = (elements.aiChatPhone?.value || "").trim();
+        const mensagem = (elements.aiChatInput?.value || "").trim();
+        if (!telefone) {
+            setAiFeedback("Informe o telefone do cliente.", "is-error");
+            return;
+        }
+        if (!mensagem) return;
+
+        appendAiMessage(mensagem, "user");
+        if (elements.aiChatInput) elements.aiChatInput.value = "";
+        setAiFeedback("IA consultando horarios...", "is-loading");
+
+        try {
+            const response = await fetch(aiChatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({ telefone, mensagem, contexto: aiContext }),
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== "sucesso") {
+                throw new Error(payload.message || "Falha ao falar com a IA.");
+            }
+            aiContext = payload.contexto || {};
+            appendAiMessage(payload.resposta || "Sem resposta da IA.", "bot");
+            renderAiSuggestions(payload.sugestoes || []);
+            if (payload.agendamento_id) {
+                setAiFeedback("Agendamento criado com sucesso pela IA.", "is-success");
+                calendar?.refetchEvents();
+            } else if (payload.acao === "sem_horario" || payload.acao === "horario_indisponivel") {
+                setAiFeedback("A IA nao conseguiu concluir. Use o cadastro detalhado se precisar de mais campos.", "is-error");
+            } else {
+                setAiFeedback("");
+            }
+        } catch (error) {
+            setAiFeedback(error.message, "is-error");
         }
     }
 
@@ -92,6 +310,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function mobileCalendarView() {
         return window.matchMedia("(max-width: 480px)").matches ? "listWeek" : "timeGridDay";
+    }
+
+    function formatDateForAi(date) {
+        const day = String(date.getDate()).padStart(2, "0");
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        return `${day}/${month}/${date.getFullYear()}`;
+    }
+
+    function formatTimeForAi(date) {
+        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function startAiSchedulingFromCalendar(date, dateOnly = false) {
+        if (!elements.aiChatInput) {
+            return;
+        }
+
+        const timeText = dateOnly ? "" : ` as ${formatTimeForAi(date)}`;
+        elements.aiChatInput.value = `Quero agendar para ${formatDateForAi(date)}${timeText}`;
+        document.getElementById("assistenteAgendamento")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+        });
+        elements.aiChatInput.focus();
+        setAiFeedback("Complete o pedido por texto ou grave o restante em audio.");
     }
 
     function getHeaderToolbar() {
@@ -165,124 +408,130 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.modal.hidden = true;
     }
 
-    const calendar = new FullCalendar.Calendar(elements.calendar, {
-        initialView: isMobileViewport() ? mobileCalendarView() : "timeGridWeek",
-        locale: "pt-br",
-        editable: true,
-        nowIndicator: true,
-        height: "auto",
-        slotMinTime: "06:00:00",
-        slotMaxTime: "22:00:00",
-        allDaySlot: false,
-        headerToolbar: getHeaderToolbar(),
-        buttonText: {
-            today: "Hoje",
-            month: "Mes",
-            week: "Semana",
-            day: "Dia",
-            list: "Lista",
-        },
-        eventTimeFormat: {
-            hour: "2-digit",
-            minute: "2-digit",
-            meridiem: false,
-        },
-        loading(isLoading) {
-            if (isLoading) {
-                setFeedback("Carregando calendario...", "is-loading");
-            }
-        },
-        events(fetchInfo, successCallback, failureCallback) {
-            const url = buildUrl(eventsUrl, {
-                start: fetchInfo.startStr,
-                end: fetchInfo.endStr,
-                tipo_evento: elements.filtroTipo.value,
-                profissional: elements.filtroProfissional.value,
-                status: elements.filtroStatus.value,
-            });
-
-            fetch(url.toString(), {
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-            })
-                .then((response) => {
-                    if (!response.ok) {
-                        throw new Error("Nao foi possivel carregar a agenda.");
-                    }
-
-                    return response.json();
-                })
-                .then((data) => {
-                    successCallback(data);
-
-                    if (data.length) {
-                        setFeedback(`${data.length} evento(s) exibido(s) no calendario.`);
-                    } else {
-                        setFeedback("Nenhum evento encontrado para os filtros selecionados.");
-                    }
-                })
-                .catch((error) => {
-                    setFeedback(error.message, "is-error");
-                    failureCallback(error);
+    if (hasFullCalendar && elements.calendar) {
+        calendar = new FullCalendar.Calendar(elements.calendar, {
+            initialView: isMobileViewport() ? mobileCalendarView() : "timeGridWeek",
+            locale: "pt-br",
+            editable: true,
+            selectable: true,
+            nowIndicator: true,
+            height: "auto",
+            slotMinTime: "06:00:00",
+            slotMaxTime: "22:00:00",
+            allDaySlot: false,
+            headerToolbar: getHeaderToolbar(),
+            buttonText: {
+                today: "Hoje",
+                month: "Mes",
+                week: "Semana",
+                day: "Dia",
+                list: "Lista",
+            },
+            eventTimeFormat: {
+                hour: "2-digit",
+                minute: "2-digit",
+                meridiem: false,
+            },
+            loading(isLoading) {
+                if (isLoading) {
+                    setFeedback("Carregando calendario...", "is-loading");
+                }
+            },
+            events(fetchInfo, successCallback, failureCallback) {
+                const url = buildUrl(eventsUrl, {
+                    start: fetchInfo.startStr,
+                    end: fetchInfo.endStr,
+                    tipo_evento: elements.filtroTipo.value,
+                    profissional: elements.filtroProfissional.value,
+                    status: elements.filtroStatus.value,
                 });
-        },
-        eventClick(info) {
-            openModal(info.event);
-        },
-        async eventDrop(info) {
-            const props = info.event.extendedProps || {};
-            if (props.tipo_evento === "produto" || props.is_product_event) {
-                info.revert();
-                setFeedback("Eventos de produto nao podem ser arrastados no calendario.", "is-error");
-                return;
-            }
 
-            const moveUrl = replaceTemplateId(moveUrlTemplate, info.event.id);
-
-            setFeedback("Atualizando horario do agendamento...", "is-loading");
-
-            try {
-                const response = await fetch(moveUrl, {
-                    method: "POST",
+                fetch(url.toString(), {
                     headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRFToken": getCookie("csrftoken"),
                         "X-Requested-With": "XMLHttpRequest",
                     },
-                    body: JSON.stringify({
-                        data: info.event.start ? info.event.start.toISOString() : "",
-                    }),
-                });
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error("Nao foi possivel carregar a agenda.");
+                        }
 
-                const payload = await response.json();
-                if (!response.ok || payload.status !== "ok") {
-                    throw new Error(payload.mensagem || "Nao foi possivel mover o agendamento.");
+                        return response.json();
+                    })
+                    .then((data) => {
+                        successCallback(data);
+
+                        if (data.length) {
+                            setFeedback(`${data.length} evento(s) exibido(s) no calendario.`);
+                        } else {
+                            setFeedback("Nenhum evento encontrado para os filtros selecionados.");
+                        }
+                    })
+                    .catch((error) => {
+                        setFeedback(error.message, "is-error");
+                        failureCallback(error);
+                    });
+            },
+            eventClick(info) {
+                openModal(info.event);
+            },
+            dateClick(info) {
+                startAiSchedulingFromCalendar(info.date, info.allDay || info.view.type === "dayGridMonth");
+            },
+            async eventDrop(info) {
+                const props = info.event.extendedProps || {};
+                if (props.tipo_evento === "produto" || props.is_product_event) {
+                    info.revert();
+                    setFeedback("Eventos de produto nao podem ser arrastados no calendario.", "is-error");
+                    return;
                 }
 
-                setFeedback("Agendamento atualizado com sucesso.", "is-success");
-            } catch (error) {
-                info.revert();
-                setFeedback(error.message, "is-error");
+                const moveUrl = replaceTemplateId(moveUrlTemplate, info.event.id);
+
+                setFeedback("Atualizando horario do agendamento...", "is-loading");
+
+                try {
+                    const response = await fetch(moveUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie("csrftoken"),
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        body: JSON.stringify({
+                            data: info.event.start ? info.event.start.toISOString() : "",
+                        }),
+                    });
+
+                    const payload = await response.json();
+                    if (!response.ok || payload.status !== "ok") {
+                        throw new Error(payload.mensagem || "Nao foi possivel mover o agendamento.");
+                    }
+
+                    setFeedback("Agendamento atualizado com sucesso.", "is-success");
+                } catch (error) {
+                    info.revert();
+                    setFeedback(error.message, "is-error");
+                }
+            },
+        });
+
+        calendar.render();
+        applyResponsiveCalendarLayout(calendar);
+
+        let lastWasMobile = isMobileViewport();
+        window.addEventListener("resize", () => {
+            const currentMobile = isMobileViewport();
+            if (currentMobile !== lastWasMobile) {
+                applyResponsiveCalendarLayout(calendar);
+                lastWasMobile = currentMobile;
             }
-        },
-    });
-
-    calendar.render();
-    applyResponsiveCalendarLayout(calendar);
-
-    let lastWasMobile = isMobileViewport();
-    window.addEventListener("resize", () => {
-        const currentMobile = isMobileViewport();
-        if (currentMobile !== lastWasMobile) {
-            applyResponsiveCalendarLayout(calendar);
-            lastWasMobile = currentMobile;
-        }
-    });
+        });
+    }
 
     [elements.filtroTipo, elements.filtroProfissional, elements.filtroStatus].forEach((field) => {
         field.addEventListener("change", () => {
-            calendar.refetchEvents();
+            calendar?.refetchEvents();
         });
     });
 
@@ -290,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.filtroTipo.value = "geral";
         elements.filtroProfissional.value = "";
         elements.filtroStatus.value = "";
-        calendar.refetchEvents();
+        calendar?.refetchEvents();
     });
 
     [elements.fecharModal, elements.modalFecharAcao].forEach((button) => {
@@ -323,7 +572,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 setFeedback(`Status atualizado para "${payload.novo_status_label}".`, "is-success");
                 closeModal();
-                calendar.refetchEvents();
+                calendar?.refetchEvents();
             } catch (error) {
                 setFeedback(error.message, "is-error");
             }
@@ -341,4 +590,45 @@ document.addEventListener("DOMContentLoaded", () => {
             closeModal();
         }
     });
+
+    elements.dispararReengajamentoBtn?.addEventListener("click", async () => {
+        if (!reengagementUrl) {
+            return;
+        }
+
+        setCampaignFeedback("Disparando campanha de reengajamento...", "is-loading");
+        try {
+            const response = await fetch(reengagementUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({}),
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== "sucesso") {
+                throw new Error(payload.message || "Falha ao disparar campanha.");
+            }
+            setCampaignFeedback(payload.message || "Campanha disparada com sucesso.", "is-success");
+        } catch (error) {
+            setCampaignFeedback(error.message, "is-error");
+        }
+    });
+
+    elements.aiChatSendBtn?.addEventListener("click", sendAiMessage);
+    elements.aiChatVoiceBtn?.addEventListener("click", toggleVoiceScheduling);
+    elements.aiChatInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            sendAiMessage();
+        }
+    });
+
+    if (elements.aiChatVoiceBtn && !SpeechRecognitionConstructor) {
+        elements.aiChatVoiceBtn.disabled = true;
+        elements.aiChatVoiceBtn.title = "Audio indisponivel neste navegador.";
+        setVoiceStatus("Audio indisponivel neste navegador. Use a mensagem escrita.");
+    }
 });

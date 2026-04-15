@@ -36,6 +36,7 @@ class Empresa(models.Model):
     logo_url = models.URLField(blank=True, default="")
     cor_primaria = models.CharField(max_length=7, blank=True, default="")
     cor_secundaria = models.CharField(max_length=7, blank=True, default="")
+    texto_cabecalho = models.CharField(max_length=80, blank=True, default="")
     plano = models.CharField(max_length=20, choices=PLANO_CHOICES, default=PLANO_START)
     valor_mensal = models.DecimalField(max_digits=10, decimal_places=2, default=147)
     limite_profissionais = models.PositiveSmallIntegerField(

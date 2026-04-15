@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import DashboardPreference
+
+
+@admin.register(DashboardPreference)
+class DashboardPreferenceAdmin(admin.ModelAdmin):
+    list_display = ("empresa", "updated_at")
+    search_fields = ("empresa__nome",)

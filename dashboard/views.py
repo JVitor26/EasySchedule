@@ -7,6 +7,9 @@ from pessoa.models import Pessoa
 from profissionais.models import Profissional
 from servicos.models import Servico
 from agendamentos.models import Agendamento, NotificacaoProfissional
+from core.loyalty import build_reengagement_candidates, nps_score_from_queryset
+from core.models import NPSResposta
+from produtos.models import VendaProduto
 from empresas.tenancy import get_active_empresa
 from empresas.permissions import is_profissional_user, is_global_admin
 from .models import DashboardPreference
@@ -97,6 +100,41 @@ def get_dashboard_card_definitions(empresa):
             'group': 'right',
             'format': 'number',
         },
+        {
+            'key': 'no_show_month',
+            'label': 'No-show no mês',
+            'description': 'Atendimentos sem comparecimento no mês.',
+            'group': 'right',
+            'format': 'number',
+        },
+        {
+            'key': 'show_rate_month',
+            'label': 'Taxa de comparecimento',
+            'description': 'Percentual de comparecimento sobre a agenda do mês.',
+            'group': 'right',
+            'format': 'percent',
+        },
+        {
+            'key': 'reactivation_candidates',
+            'label': 'Reativações prontas',
+            'description': 'Clientes sem retorno recente e sem próximos agendamentos.',
+            'group': 'left',
+            'format': 'number',
+        },
+        {
+            'key': 'avg_ticket_month',
+            'label': 'Ticket médio',
+            'description': 'Valor médio por atendimento finalizado no mês.',
+            'group': 'left',
+            'format': 'currency',
+        },
+        {
+            'key': 'nps_month',
+            'label': 'NPS do mês',
+            'description': 'Pontuação de satisfação calculada por promotores e detratores.',
+            'group': 'right',
+            'format': 'number',
+        },
     ]
 
 
@@ -141,6 +179,35 @@ def dashboard_home(request):
     appointments_month = agendamentos_mes.count()
     finalized_month = agendamentos_mes.filter(status='finalizado').count()
     canceled_month = agendamentos_mes.filter(status='cancelado').count()
+    no_show_month = agendamentos_mes.filter(status='no_show').count()
+
+    presence_base = appointments_month - canceled_month
+    show_rate_month = 0
+    if presence_base > 0:
+        show_rate_month = round(((finalized_month + confirmed_today) / presence_base) * 100, 1)
+
+    avg_ticket_month = 0
+    if finalized_month > 0:
+        avg_ticket_month = round(revenue_month / finalized_month, 2)
+
+    product_revenue_month = (
+        VendaProduto.objects.filter(
+            empresa=empresa,
+            data_pagamento__isnull=False,
+            data_pagamento__month=hoje.month,
+            data_pagamento__year=hoje.year,
+        ).aggregate(total=Sum('valor_venda'))['total'] or 0
+    )
+    total_revenue_month = revenue_month + product_revenue_month
+
+    nps_queryset = NPSResposta.objects.filter(
+        empresa=empresa,
+        criado_em__month=hoje.month,
+        criado_em__year=hoje.year,
+    )
+    nps_month = nps_score_from_queryset(nps_queryset)
+    reengagement = build_reengagement_candidates(empresa, days_without_return=35, limit=20)
+    reactivation_candidates = len(reengagement)
 
     preference, _ = DashboardPreference.objects.get_or_create(empresa=empresa)
     cards = get_dashboard_card_definitions(empresa)
@@ -158,6 +225,11 @@ def dashboard_home(request):
         'pending_today': pending_today,
         'finalized_month': finalized_month,
         'canceled_month': canceled_month,
+        'no_show_month': no_show_month,
+        'show_rate_month': show_rate_month,
+        'reactivation_candidates': reactivation_candidates,
+        'avg_ticket_month': avg_ticket_month,
+        'nps_month': nps_month,
     }
 
     for card in selected_cards:
@@ -176,8 +248,14 @@ def dashboard_home(request):
         'total_agendamentos': total_appointments,
         'total_servicos': total_services,
         'total_atendimentos_mes': appointments_month,
+        'total_faturamento_mes': total_revenue_month,
         'confirmados_hoje': confirmed_today,
         'pendentes_hoje': pending_today,
+        'no_show_mes': no_show_month,
+        'show_rate_month': show_rate_month,
+        'avg_ticket_month': avg_ticket_month,
+        'nps_month': nps_month,
+        'reativacao_candidatos': reengagement,
         'profissionais': profissionais,
         'status_choices': Agendamento.STATUS_CHOICES,
         'agendamentos_hoje': agendamentos_hoje,

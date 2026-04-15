@@ -953,3 +953,157 @@ class InfrastructureEndpointsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["X-Request-ID"], request_id)
 
+
+class AISchedulingChatTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="empresa-ia@example.com",
+            email="empresa-ia@example.com",
+            password="senha-forte-123",
+        )
+        self.empresa = Empresa.objects.create(
+            usuario=self.owner,
+            nome="Studio IA",
+            tipo="barbearia",
+            cnpj="12345678000100",
+        )
+        self.profissional = Profissional.objects.create(
+            empresa=self.empresa,
+            nome="Rafael",
+            especialidade="Corte",
+            telefone="65999999999",
+            email="rafael@example.com",
+            ativo=True,
+        )
+        self.servico = Servico.objects.create(
+            empresa=self.empresa,
+            nome="Corte completo",
+            categoria="corte",
+            descricao="Corte premium",
+            preco=70,
+            tempo=60,
+            ativo=True,
+        )
+        self.data_agendamento = timezone.localdate() + timedelta(days=2)
+
+    def test_ai_chat_guia_fluxo_e_cria_agendamento(self):
+        url = reverse("ai_scheduling_chat_api", args=[self.empresa.portal_token])
+        phone = "(65) 99999-1111"
+
+        step1 = self.client.post(
+            url,
+            data=json.dumps({"telefone": phone, "mensagem": "Quero agendar"}),
+            content_type="application/json",
+        )
+        self.assertEqual(step1.status_code, 200)
+        payload1 = step1.json()
+        self.assertEqual(payload1["acao"], "pedir_servico")
+        self.assertIn("Corte completo", payload1["sugestoes"])
+
+        step2 = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": "Corte completo com Rafael",
+                "contexto": payload1["contexto"],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(step2.status_code, 200)
+        payload2 = step2.json()
+        self.assertEqual(payload2["acao"], "pedir_data")
+
+        step3 = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": self.data_agendamento.strftime("%d/%m/%Y"),
+                "contexto": payload2["contexto"],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(step3.status_code, 200)
+        payload3 = step3.json()
+        self.assertEqual(payload3["acao"], "pedir_horario")
+        self.assertTrue(payload3["sugestoes"])
+        horario = payload3["sugestoes"][0]
+
+        step4 = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": horario,
+                "contexto": payload3["contexto"],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(step4.status_code, 200)
+        payload4 = step4.json()
+        self.assertEqual(payload4["acao"], "confirmar_agendamento")
+
+        step5 = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": "confirmar",
+                "contexto": payload4["contexto"],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(step5.status_code, 200)
+        payload5 = step5.json()
+        self.assertEqual(payload5["acao"], "agendamento_criado")
+        self.assertTrue(payload5["agendamento_id"])
+
+        created = Agendamento.objects.get(pk=payload5["agendamento_id"])
+        self.assertEqual(created.empresa_id, self.empresa.id)
+        self.assertEqual(created.servico_id, self.servico.id)
+        self.assertEqual(created.profissional_id, self.profissional.id)
+        self.assertEqual(created.status, "pendente")
+
+    def test_ai_chat_dashboard_endpoint_funciona_para_usuario_logado(self):
+        self.client.force_login(self.owner)
+        url = reverse("ai_scheduling_dashboard_api")
+        response = self.client.post(
+            url,
+            data=json.dumps({"telefone": "65999991111", "mensagem": "quero agendar"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "sucesso")
+        self.assertEqual(payload["acao"], "pedir_servico")
+
+    def test_ai_chat_entende_audio_transcrito_com_acentos(self):
+        self.client.force_login(self.owner)
+        url = reverse("ai_scheduling_dashboard_api")
+        phone = "65999991111"
+
+        response = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": "Quero agendar Corte completo com Rafael amanhã às 15 horas",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "confirmar_agendamento")
+        self.assertEqual(payload["contexto"]["booking"]["data"], (timezone.localdate() + timedelta(days=1)).isoformat())
+        self.assertEqual(payload["contexto"]["booking"]["hora"], "15:00")
+
+        confirmation = self.client.post(
+            url,
+            data=json.dumps({
+                "telefone": phone,
+                "mensagem": "sim",
+                "contexto": payload["contexto"],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(confirmation.status_code, 200)
+        confirmation_payload = confirmation.json()
+        self.assertEqual(confirmation_payload["acao"], "agendamento_criado")
+        self.assertTrue(Agendamento.objects.filter(pk=confirmation_payload["agendamento_id"]).exists())
+

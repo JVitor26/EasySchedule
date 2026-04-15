@@ -49,7 +49,17 @@
                     {% endif %}
                     <span class="brand-copy">
                         <strong>{% if user.is_authenticated and empresa_atual %}{{ empresa_atual.nome }}{% else %}EasySchedule{% endif %}</strong>
-                        <small>{% if user.is_authenticated %}Sistema de agenda personalizado{% else %}Reserva online com elegancia{% endif %}</small>
+                        <small>
+                            {% if user.is_authenticated %}
+                                {% if empresa_atual and empresa_atual.texto_cabecalho %}
+                                    {{ empresa_atual.texto_cabecalho }}
+                                {% else %}
+                                    Sistema de agenda personalizado
+                                {% endif %}
+                            {% else %}
+                                Reserva online com elegancia
+                            {% endif %}
+                        </small>
                     </span>
                 </a>
 

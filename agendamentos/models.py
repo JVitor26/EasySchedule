@@ -65,6 +65,7 @@ class Agendamento(models.Model):
         ("confirmado", "Confirmado"),
         ("cancelado", "Cancelado"),
         ("finalizado", "Finalizado"),
+        ("no_show", "Nao compareceu"),
     ]
     METODO_PAGAMENTO_CHOICES = [
         ("pix", "Pix"),

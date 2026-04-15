@@ -316,6 +316,7 @@ class EmpresaConfiguracoesTests(TestCase):
                 "limite_profissionais": "5",
                 "cor_primaria": "#0f4c81",
                 "cor_secundaria": "#188fa7",
+                "texto_cabecalho": "Agenda VIP da Studio Premium",
                 f"acessos_{self.profissional.pk}": [
                     PROFISSIONAL_ACCESS_CLIENTES,
                     PROFISSIONAL_ACCESS_SERVICOS,
@@ -336,6 +337,7 @@ class EmpresaConfiguracoesTests(TestCase):
         self.assertEqual(float(self.empresa.valor_mensal), 147.0)
         self.assertEqual(self.empresa.cor_primaria, "#0f4c81")
         self.assertEqual(self.empresa.cor_secundaria, "#188fa7")
+        self.assertEqual(self.empresa.texto_cabecalho, "Agenda VIP da Studio Premium")
         self.assertIn(PROFISSIONAL_ACCESS_CLIENTES, self.profissional.acessos_modulos)
         self.assertIn(PROFISSIONAL_ACCESS_SERVICOS, self.profissional.acessos_modulos)
 

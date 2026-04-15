@@ -139,6 +139,12 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
     )
     cor_primaria = forms.CharField(label='Cor primaria (hex opcional)', max_length=7, required=False)
     cor_secundaria = forms.CharField(label='Cor secundaria (hex opcional)', max_length=7, required=False)
+    texto_cabecalho = forms.CharField(
+        label='Texto do cabecalho (opcional)',
+        max_length=80,
+        required=False,
+        help_text='Texto exibido abaixo do nome da empresa no topo do sistema.',
+    )
 
     PLAN_PRICES = {
         Empresa.PLANO_SOLO: 97,
@@ -157,6 +163,7 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
             'logo',
             'cor_primaria',
             'cor_secundaria',
+            'texto_cabecalho',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -173,6 +180,7 @@ class EmpresaConfiguracaoForm(forms.ModelForm):
         self.fields['logo'].widget.attrs.update({'accept': 'image/*'})
         self.fields['cor_primaria'].widget.attrs.update({'placeholder': '#0f4c81'})
         self.fields['cor_secundaria'].widget.attrs.update({'placeholder': '#188fa7'})
+        self.fields['texto_cabecalho'].widget.attrs.update({'placeholder': 'Ex.: Agenda premium com atendimento personalizado'})
 
     def clean(self):
         cleaned_data = super().clean()

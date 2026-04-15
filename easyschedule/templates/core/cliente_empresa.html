@@ -228,6 +228,12 @@
             {{ form.data_nascimento }}
             {{ form.data_nascimento.errors }}
           </div>
+          <div class="client-form-group">
+            <label>{{ form.codigo_indicacao.label }}</label>
+            {{ form.codigo_indicacao }}
+            <small class="field-help">Use o codigo de quem te indicou para ativar beneficios.</small>
+            {{ form.codigo_indicacao.errors }}
+          </div>
           <div class="client-form-group client-form-group-full">
             <label>{{ form.tipo_reserva.label }}</label>
             <div class="booking-type-grid">
@@ -374,9 +380,37 @@
 
       <p id="trackFeedback" class="slots-feedback">Entre no portal para consultar sem digitar telefone toda vez.</p>
       <div id="trackResults" class="client-mini-list" style="display: none;"></div>
+      <div id="loyaltySummary" class="client-mini-list" style="display: none;"></div>
     </section>
   </div>
 </section>
+
+<div id="rescheduleModal" class="client-modal" hidden>
+  <div class="client-modal-backdrop" data-close-modal="true"></div>
+  <div class="client-modal-box" role="dialog" aria-modal="true" aria-labelledby="rescheduleModalTitle">
+    <div class="client-panel-header">
+      <div>
+        <h2 id="rescheduleModalTitle">Remarcar agendamento</h2>
+        <p>Informe nova data e horario para este atendimento.</p>
+      </div>
+    </div>
+    <div class="client-form-grid">
+      <div class="client-form-group">
+        <label for="rescheduleDate">Nova data</label>
+        <input id="rescheduleDate" type="date">
+      </div>
+      <div class="client-form-group">
+        <label for="rescheduleTime">Novo horario</label>
+        <input id="rescheduleTime" type="time">
+      </div>
+    </div>
+    <p id="rescheduleFeedback" class="slots-feedback"></p>
+    <div class="client-success-actions">
+      <button type="button" id="rescheduleSubmitBtn" class="btn-success">Salvar remarcacao</button>
+      <button type="button" id="rescheduleCancelBtn" class="btn-secondary">Fechar</button>
+    </div>
+  </div>
+</div>
 
 <script src="{% static 'js/client_portal.js' %}"></script>
 
@@ -461,8 +495,16 @@ const otpStartForm = document.getElementById('otpStartForm');
 const otpValidateForm = document.getElementById('otpValidateForm');
 const trackFeedback = document.getElementById('trackFeedback');
 const trackResults = document.getElementById('trackResults');
+const loyaltySummary = document.getElementById('loyaltySummary');
 const portalActions = document.getElementById('portalActions');
 const portalLogoutBtn = document.getElementById('portalLogoutBtn');
+const rescheduleModal = document.getElementById('rescheduleModal');
+const rescheduleDate = document.getElementById('rescheduleDate');
+const rescheduleTime = document.getElementById('rescheduleTime');
+const rescheduleFeedback = document.getElementById('rescheduleFeedback');
+const rescheduleSubmitBtn = document.getElementById('rescheduleSubmitBtn');
+const rescheduleCancelBtn = document.getElementById('rescheduleCancelBtn');
+let pendingRescheduleId = null;
 let currentOtpId = null;
 
 function setTrackFeedback(message, state = '') {
@@ -483,6 +525,7 @@ function renderAgendamentos(ags) {
       ${ag.pagamento_url ? `<a class="back-link" href="${ag.pagamento_url}" style="margin-top:0.4rem;">Pagar este agendamento</a>` : ''}
       ${ag.can_change ? `
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
+          <button type="button" class="btn-success" onclick="confirmarAgendamento(${ag.id})">Confirmar</button>
           <button type="button" class="btn-secondary" onclick="cancelarAgendamento(${ag.id})">Cancelar</button>
           <button type="button" class="btn-success" onclick="remarcarAgendamento(${ag.id}, '${ag.agendamento_iso_date}', '${ag.agendamento_hour}')">Remarcar</button>
         </div>
@@ -490,6 +533,41 @@ function renderAgendamentos(ags) {
     </article>
   `).join('');
   trackResults.style.display = 'flex';
+}
+
+function renderLoyalty(data) {
+  const fidelidade = data?.fidelidade;
+  if (!fidelidade) {
+    loyaltySummary.style.display = 'none';
+    loyaltySummary.innerHTML = '';
+    return;
+  }
+  loyaltySummary.innerHTML = `
+    <article class="mini-item">
+      <strong>Fidelidade ativa</strong>
+      <span>Pontos disponiveis: ${fidelidade.pontos_disponiveis}</span>
+      <small>Pontos totais: ${fidelidade.pontos_totais}</small>
+      <small>Seu codigo de indicacao: ${fidelidade.codigo_indicacao || '-'}</small>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
+        <button type="button" class="btn-success" onclick="resgatarPontos(50)">Resgatar 50 pontos</button>
+      </div>
+    </article>
+  `;
+  loyaltySummary.style.display = 'flex';
+}
+
+async function carregarFidelidade() {
+  const response = await fetch(`/cliente/empresa/${empresa_token}/api/fidelidade/`, {
+    method: 'GET',
+    headers: {
+      'X-CSRFToken': csrftoken,
+    },
+  });
+  const data = await response.json();
+  if (!response.ok || data.status !== 'sucesso') {
+    return;
+  }
+  renderLoyalty(data);
 }
 
 async function carregarMeusAgendamentos() {
@@ -545,10 +623,32 @@ portalPasswordForm?.addEventListener('submit', async (event) => {
     portalActions.style.display = 'flex';
     otpValidateForm.style.display = 'none';
     await carregarMeusAgendamentos();
+    await carregarFidelidade();
   } catch (error) {
     setTrackFeedback(error.message, 'is-error');
   }
 });
+
+window.confirmarAgendamento = async function(agendamentoId) {
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/${agendamentoId}/confirmar/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Falha ao confirmar.');
+    }
+    setTrackFeedback(data.message || 'Agendamento confirmado.', 'is-success');
+    await carregarMeusAgendamentos();
+  } catch (error) {
+    setTrackFeedback(error.message, 'is-error');
+  }
+};
 
 window.cancelarAgendamento = async function(agendamentoId) {
   if (!confirm('Deseja realmente cancelar este agendamento?')) return;
@@ -571,14 +671,40 @@ window.cancelarAgendamento = async function(agendamentoId) {
   }
 };
 
-window.remarcarAgendamento = async function(agendamentoId, dataAtual, horaAtual) {
-  const novaData = prompt('Nova data (AAAA-MM-DD):', dataAtual);
-  if (!novaData) return;
-  const novaHora = prompt('Novo horario (HH:MM):', horaAtual);
-  if (!novaHora) return;
+function setRescheduleFeedback(message, state = '') {
+  rescheduleFeedback.textContent = message || '';
+  rescheduleFeedback.classList.remove('is-error', 'is-success', 'is-loading');
+  if (state) {
+    rescheduleFeedback.classList.add(state);
+  }
+}
 
+function closeRescheduleModal() {
+  pendingRescheduleId = null;
+  if (rescheduleModal) {
+    rescheduleModal.hidden = true;
+  }
+}
+
+window.remarcarAgendamento = function(agendamentoId, dataAtual, horaAtual) {
+  pendingRescheduleId = agendamentoId;
+  rescheduleDate.value = dataAtual || '';
+  rescheduleTime.value = horaAtual || '';
+  setRescheduleFeedback('');
+  rescheduleModal.hidden = false;
+};
+
+rescheduleSubmitBtn?.addEventListener('click', async () => {
+  if (!pendingRescheduleId) return;
+  const novaData = (rescheduleDate.value || '').trim();
+  const novaHora = (rescheduleTime.value || '').trim();
+  if (!novaData || !novaHora) {
+    setRescheduleFeedback('Informe nova data e horario.', 'is-error');
+    return;
+  }
+  setRescheduleFeedback('Remarcando agendamento...', 'is-loading');
   try {
-    const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/${agendamentoId}/remarcar/`, {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/agendamentos/${pendingRescheduleId}/remarcar/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -590,7 +716,44 @@ window.remarcarAgendamento = async function(agendamentoId, dataAtual, horaAtual)
     if (!response.ok || data.status !== 'sucesso') {
       throw new Error(data.message || 'Falha ao remarcar.');
     }
+    setRescheduleFeedback(data.message || 'Agendamento remarcado com sucesso.', 'is-success');
     await carregarMeusAgendamentos();
+    closeRescheduleModal();
+  } catch (error) {
+    setRescheduleFeedback(error.message, 'is-error');
+  }
+});
+
+rescheduleCancelBtn?.addEventListener('click', closeRescheduleModal);
+rescheduleModal?.addEventListener('click', (event) => {
+  if (event.target?.dataset?.closeModal === 'true') {
+    closeRescheduleModal();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !rescheduleModal?.hidden) {
+    closeRescheduleModal();
+  }
+});
+
+window.resgatarPontos = async function(pontos) {
+  setTrackFeedback('Processando resgate de pontos...', 'is-loading');
+  try {
+    const response = await fetch(`/cliente/empresa/${empresa_token}/api/fidelidade/resgatar/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+      },
+      body: JSON.stringify({ pontos }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.status !== 'sucesso') {
+      throw new Error(data.message || 'Falha no resgate de pontos.');
+    }
+    setTrackFeedback(data.message || 'Pontos resgatados com sucesso.', 'is-success');
+    await carregarFidelidade();
   } catch (error) {
     setTrackFeedback(error.message, 'is-error');
   }
@@ -657,6 +820,7 @@ otpValidateForm?.addEventListener('submit', async (event) => {
 
     portalActions.style.display = 'flex';
     await carregarMeusAgendamentos();
+    await carregarFidelidade();
   } catch (error) {
     setTrackFeedback(error.message, 'is-error');
   }
@@ -674,6 +838,7 @@ portalLogoutBtn?.addEventListener('click', async () => {
   portalActions.style.display = 'none';
   otpValidateForm.style.display = 'none';
   trackResults.style.display = 'none';
+  loyaltySummary.style.display = 'none';
   portalPasswordForm?.reset();
   setTrackFeedback('Sessao do portal encerrada.');
 });
@@ -681,6 +846,7 @@ portalLogoutBtn?.addEventListener('click', async () => {
 {% if cliente_portal_autenticado %}
 portalActions.style.display = 'flex';
 carregarMeusAgendamentos().catch((error) => setTrackFeedback(error.message, 'is-error'));
+carregarFidelidade().catch(() => {});
 {% endif %}
 
 {% if success_booking %}

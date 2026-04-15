@@ -22,6 +22,7 @@ from produtos.models import Produto, VendaProduto
 from servicos.models import Servico
 from .notifications import notify_booking_created
 from empresas.models import Empresa
+from .loyalty import apply_referral_code, get_or_create_cliente_fidelidade
 
 
 BOOKING_TYPE_CHOICES = [
@@ -118,6 +119,7 @@ class PublicBookingForm(forms.Form):
     data_retirada_produtos = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
     produtos_json = forms.CharField(required=False, widget=forms.HiddenInput())
     slot_hold_token = forms.CharField(required=False, widget=forms.HiddenInput())
+    codigo_indicacao = forms.CharField(required=False, max_length=24)
 
     def __init__(self, *args, empresa=None, session_key=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -144,6 +146,8 @@ class PublicBookingForm(forms.Form):
         self.fields["observacoes"].label = profile["appointment_notes_label"]
         self.fields["observacoes"].widget.attrs["placeholder"] = profile["appointment_notes_placeholder"]
         self.fields["data_retirada_produtos"].label = "Dia para retirada dos produtos (opcional)"
+        self.fields["codigo_indicacao"].label = "Codigo de indicacao (opcional)"
+        self.fields["codigo_indicacao"].widget.attrs["placeholder"] = "Ex.: E12-ABC123"
 
         if empresa is not None:
             self.fields["servico"].queryset = Servico.objects.filter(
@@ -263,6 +267,9 @@ class PublicBookingForm(forms.Form):
 
     def clean_email(self):
         return self.cleaned_data.get("email", "").strip().lower()
+
+    def clean_codigo_indicacao(self):
+        return (self.cleaned_data.get("codigo_indicacao") or "").strip().upper()
 
     def clean_tipo_reserva(self):
         tipo_reserva = self.cleaned_data.get("tipo_reserva") or "avulso"
@@ -613,11 +620,18 @@ class PublicBookingForm(forms.Form):
             else cliente.data_nascimento
         )
         cliente.save()
+        get_or_create_cliente_fidelidade(self.empresa, cliente)
         return cliente
 
     @transaction.atomic
     def save(self):
         cliente = self._get_or_create_cliente()
+        codigo_indicacao = self.cleaned_data.get("codigo_indicacao") or ""
+        if codigo_indicacao:
+            ok, message = apply_referral_code(self.empresa, cliente, codigo_indicacao)
+            if not ok:
+                self.add_error("codigo_indicacao", message)
+                raise ValidationError({"codigo_indicacao": [message]})
         booking_type = self.cleaned_data["tipo_reserva"]
 
         if booking_type == "somente_produtos":

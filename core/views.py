@@ -13,7 +13,7 @@ import logging
 import json
 import re
 from decimal import Decimal
-from datetime import timedelta
+from datetime import datetime, timedelta
 import secrets
 import stripe
 
@@ -31,6 +31,15 @@ from produtos.models import Produto
 from servicos.models import Servico
 from .models import ClientePortalOTP, ClientePortalPreferencia, PasswordRecoveryCode, StripeWebhookEvent
 from .notifications import send_whatsapp_message, send_email_message
+from .loyalty import (
+    apply_referral_code,
+    award_points_for_finalized_appointment,
+    build_reengagement_candidates,
+    get_or_create_cliente_fidelidade,
+)
+from .audit import log_audit_event
+from .jobs import run_reengagement_for_empresa, run_reminders_for_empresa
+from .ai_scheduling import handle_ai_scheduling_message
 
 from .forms import (
     PasswordRecoveryConfirmForm,
@@ -355,7 +364,42 @@ def _dispatch_recovery_code(account_type, destination, channel, code, empresa=No
 
 def _can_client_change_appointment(agendamento):
     hoje = timezone.localdate()
-    return agendamento.status not in ("cancelado", "finalizado") and agendamento.data >= hoje
+    return agendamento.status not in ("cancelado", "finalizado", "no_show") and agendamento.data >= hoje
+
+
+def _dispatch_reminder_message(agendamento, janela):
+    label = "24h" if janela == "24h" else "2h"
+    base_message = (
+        f"Lembrete de atendimento ({label}).\n"
+        f"Empresa: {agendamento.empresa.nome}\n"
+        f"Servico: {agendamento.servico.nome}\n"
+        f"Profissional: {agendamento.profissional.nome}\n"
+        f"Data: {agendamento.data.strftime('%d/%m/%Y')}\n"
+        f"Hora: {agendamento.hora.strftime('%H:%M')}"
+    )
+    subject = f"Lembrete {label} - {agendamento.empresa.nome}"
+
+    pref, _ = ClientePortalPreferencia.objects.get_or_create(
+        empresa=agendamento.empresa,
+        cliente=agendamento.cliente,
+    )
+
+    allow_send = (
+        pref.receber_lembrete_24h if janela == "24h" else pref.receber_lembrete_2h
+    )
+    if not allow_send:
+        return False
+
+    sent = False
+    if pref.receber_whatsapp and agendamento.cliente.telefone:
+        send_whatsapp_message(agendamento.cliente.telefone, base_message)
+        sent = True
+
+    if pref.receber_email and agendamento.cliente.email:
+        send_email_message(agendamento.cliente.email, subject, base_message)
+        sent = True
+
+    return sent
 
 
 def empresa_catalogo(request, portal_token):
@@ -1190,6 +1234,31 @@ def cliente_agendamentos_api(request, portal_token):
 
 
 @require_http_methods(["POST"])
+def cliente_agendamento_confirmar_api(request, portal_token, agendamento_id):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    cliente = _get_portal_cliente(request, empresa)
+    if not cliente:
+        return JsonResponse({"status": "erro", "message": "Faça login no portal para confirmar."}, status=401)
+
+    agendamento = get_object_or_404(Agendamento, pk=agendamento_id, empresa=empresa, cliente=cliente)
+    if agendamento.status not in ("pendente", "confirmado"):
+        return JsonResponse({"status": "erro", "message": "Este agendamento nao pode ser confirmado agora."}, status=400)
+
+    agendamento.status = "confirmado"
+    agendamento.save(update_fields=["status"])
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_agendamento_confirmado",
+        entidade="agendamento",
+        entidade_id=agendamento.id,
+        detalhes={"status": "confirmado"},
+    )
+    return JsonResponse({"status": "sucesso", "message": "Agendamento confirmado com sucesso."})
+
+
+@require_http_methods(["POST"])
 def cliente_agendamento_cancelar_api(request, portal_token, agendamento_id):
     empresa = _get_portal_empresa_or_404(portal_token)
     cliente = _get_portal_cliente(request, empresa)
@@ -1202,6 +1271,15 @@ def cliente_agendamento_cancelar_api(request, portal_token, agendamento_id):
 
     agendamento.status = "cancelado"
     agendamento.save(update_fields=["status"])
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_agendamento_cancelado",
+        entidade="agendamento",
+        entidade_id=agendamento.id,
+        detalhes={"status": "cancelado"},
+    )
 
     return JsonResponse({"status": "sucesso", "message": "Agendamento cancelado com sucesso."})
 
@@ -1245,12 +1323,259 @@ def cliente_agendamento_remarcar_api(request, portal_token, agendamento_id):
         msg = "; ".join([f"{k}: {', '.join(v)}" for k, v in exc.message_dict.items()]) if hasattr(exc, "message_dict") else str(exc)
         return JsonResponse({"status": "erro", "message": msg}, status=400)
 
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_agendamento_remarcado",
+        entidade="agendamento",
+        entidade_id=agendamento.id,
+        detalhes={"data": agendamento.data.isoformat(), "hora": agendamento.hora.strftime("%H:%M")},
+    )
+
     return JsonResponse({
         "status": "sucesso",
         "message": "Agendamento remarcado com sucesso.",
         "data": agendamento.data.strftime("%d/%m/%Y"),
         "hora": agendamento.hora.strftime("%H:%M"),
     })
+
+
+@require_http_methods(["POST"])
+def cliente_agendamento_reagendar_api(request, portal_token, agendamento_id):
+    # Alias semântico para manter compatibilidade de naming com campanhas/UX.
+    return cliente_agendamento_remarcar_api(request, portal_token, agendamento_id)
+
+
+@require_http_methods(["POST"])
+def cliente_aplicar_indicacao_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    cliente = _get_portal_cliente(request, empresa)
+    if not cliente:
+        return JsonResponse({"status": "erro", "message": "Faça login no portal para aplicar indicacao."}, status=401)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON inválido."}, status=400)
+
+    codigo = (data.get("codigo") or "").strip().upper()
+    ok, message = apply_referral_code(empresa, cliente, codigo)
+    if not ok:
+        return JsonResponse({"status": "erro", "message": message}, status=400)
+
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_indicacao_aplicada",
+        entidade="fidelidade",
+        entidade_id=cliente.id,
+        detalhes={"codigo": codigo},
+    )
+
+    return JsonResponse({"status": "sucesso", "message": message})
+
+
+@require_http_methods(["GET"])
+def cliente_fidelidade_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    cliente = _get_portal_cliente(request, empresa)
+    if not cliente:
+        return JsonResponse({"status": "erro", "message": "Faça login no portal para consultar fidelidade."}, status=401)
+
+    conta = get_or_create_cliente_fidelidade(empresa, cliente)
+    movimentos = [
+        {
+            "origem": mov.get_origem_display(),
+            "descricao": mov.descricao,
+            "pontos": mov.pontos,
+            "criado_em": timezone.localtime(mov.criado_em).strftime("%d/%m/%Y %H:%M"),
+        }
+        for mov in conta.movimentos.all()[:10]
+    ]
+
+    return JsonResponse({
+        "status": "sucesso",
+        "fidelidade": {
+            "pontos_disponiveis": conta.pontos_disponiveis,
+            "pontos_totais": conta.pontos_totais,
+            "codigo_indicacao": conta.codigo_indicacao,
+            "indicador": conta.indicador.nome if conta.indicador_id else "",
+            "movimentos": movimentos,
+        },
+    })
+
+
+@require_http_methods(["POST"])
+def cliente_fidelidade_resgatar_api(request, portal_token):
+    from .models import FidelidadeMovimento
+
+    empresa = _get_portal_empresa_or_404(portal_token)
+    cliente = _get_portal_cliente(request, empresa)
+    if not cliente:
+        return JsonResponse({"status": "erro", "message": "Faça login no portal para resgatar pontos."}, status=401)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    try:
+        pontos = int(data.get("pontos", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "erro", "message": "Quantidade de pontos invalida."}, status=400)
+
+    if pontos <= 0:
+        return JsonResponse({"status": "erro", "message": "Informe uma quantidade positiva de pontos."}, status=400)
+
+    conta = get_or_create_cliente_fidelidade(empresa, cliente)
+    if conta.pontos_disponiveis < pontos:
+        return JsonResponse({"status": "erro", "message": "Pontos insuficientes para resgate."}, status=400)
+
+    conta.pontos_disponiveis -= pontos
+    conta.save(update_fields=["pontos_disponiveis", "atualizado_em"])
+
+    FidelidadeMovimento.objects.create(
+        empresa=empresa,
+        cliente_fidelidade=conta,
+        origem="ajuste",
+        descricao="Resgate de pontos no portal",
+        pontos=-pontos,
+        referencia_id=f"resgate:{timezone.now().timestamp()}",
+    )
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_pontos_resgatados",
+        entidade="fidelidade",
+        entidade_id=conta.id,
+        detalhes={"pontos": pontos},
+    )
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": f"Resgate de {pontos} pontos realizado.",
+        "pontos_disponiveis": conta.pontos_disponiveis,
+    })
+
+
+@require_http_methods(["POST"])
+def reminders_dispatch_api(request):
+    if not request.user.is_authenticated or not is_global_admin(request.user):
+        return JsonResponse({"status": "erro", "message": "Sem permissao."}, status=403)
+
+    empresa = get_active_empresa(request)
+    if not empresa:
+        return JsonResponse({"status": "erro", "message": "Empresa nao selecionada."}, status=400)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    janela = (data.get("janela") or "24h").strip().lower()
+    if janela not in ("24h", "2h"):
+        return JsonResponse({"status": "erro", "message": "Janela invalida. Use 24h ou 2h."}, status=400)
+
+    result = run_reminders_for_empresa(empresa, janela=janela)
+    sent = result.get(janela, 0)
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_usuario=request.user,
+        acao="admin_reminders_disparados",
+        entidade="agendamento",
+        detalhes={"janela": janela, "total_enviados": sent},
+    )
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": f"{sent} lembrete(s) enviados na janela {janela}.",
+        "total_enviados": sent,
+    })
+
+
+@require_http_methods(["POST"])
+def reengagement_dispatch_api(request):
+    if not request.user.is_authenticated or not is_global_admin(request.user):
+        return JsonResponse({"status": "erro", "message": "Sem permissao."}, status=403)
+
+    empresa = get_active_empresa(request)
+    if not empresa:
+        return JsonResponse({"status": "erro", "message": "Empresa nao selecionada."}, status=400)
+
+    result = run_reengagement_for_empresa(empresa, limit=30)
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_usuario=request.user,
+        acao="admin_reengagement_disparado",
+        entidade="crm",
+        detalhes=result,
+    )
+
+    return JsonResponse({
+        "status": "sucesso",
+        "message": (
+            f"Campanha de reengajamento executada. "
+            f"Candidatos: {result['candidatos']} | Enviados: {result['enviados']}."
+        ),
+        "resultado": result,
+    })
+
+
+@require_http_methods(["POST"])
+def nps_submit_api(request, portal_token):
+    from .models import NPSResposta
+
+    empresa = _get_portal_empresa_or_404(portal_token)
+    cliente = _get_portal_cliente(request, empresa)
+    if not cliente:
+        return JsonResponse({"status": "erro", "message": "Faça login no portal para enviar sua avaliacao."}, status=401)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    try:
+        nota = int(data.get("nota"))
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "erro", "message": "Nota invalida."}, status=400)
+
+    if nota < 0 or nota > 10:
+        return JsonResponse({"status": "erro", "message": "A nota deve estar entre 0 e 10."}, status=400)
+
+    agendamento_id = data.get("agendamento_id")
+    comentario = (data.get("comentario") or "").strip()
+
+    agendamento = None
+    if agendamento_id:
+        agendamento = Agendamento.objects.filter(
+            pk=agendamento_id,
+            empresa=empresa,
+            cliente=cliente,
+        ).first()
+
+    NPSResposta.objects.create(
+        empresa=empresa,
+        cliente=cliente,
+        agendamento=agendamento,
+        nota=nota,
+        comentario=comentario,
+    )
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_cliente=cliente,
+        acao="cliente_nps_enviado",
+        entidade="nps",
+        entidade_id=agendamento_id or "",
+        detalhes={"nota": nota},
+    )
+    return JsonResponse({"status": "sucesso", "message": "Avaliacao registrada. Obrigado!"})
 
 
 def cliente_minha_conta(request, portal_token):
@@ -1265,6 +1590,7 @@ def cliente_minha_conta(request, portal_token):
         return redirect("cliente_empresa", portal_token=empresa.portal_token)
 
     pref, _ = ClientePortalPreferencia.objects.get_or_create(empresa=empresa, cliente=cliente)
+    fidelidade = get_or_create_cliente_fidelidade(empresa, cliente)
 
     if request.method == "POST":
         cliente.nome = (request.POST.get("nome") or cliente.nome).strip()
@@ -1297,7 +1623,24 @@ def cliente_minha_conta(request, portal_token):
         pref.receber_whatsapp = request.POST.get("receber_whatsapp") == "on"
         pref.receber_email = request.POST.get("receber_email") == "on"
         pref.receber_marketing = request.POST.get("receber_marketing") == "on"
+        pref.receber_lembrete_24h = request.POST.get("receber_lembrete_24h") == "on"
+        pref.receber_lembrete_2h = request.POST.get("receber_lembrete_2h") == "on"
         pref.save()
+        log_audit_event(
+            empresa=empresa,
+            request=request,
+            ator_cliente=cliente,
+            acao="cliente_conta_atualizada",
+            entidade="cliente",
+            entidade_id=cliente.id,
+            detalhes={
+                "receber_whatsapp": pref.receber_whatsapp,
+                "receber_email": pref.receber_email,
+                "receber_marketing": pref.receber_marketing,
+                "receber_lembrete_24h": pref.receber_lembrete_24h,
+                "receber_lembrete_2h": pref.receber_lembrete_2h,
+            },
+        )
         if not password_error:
             messages.success(request, "Sua conta foi atualizada com sucesso.")
 
@@ -1319,6 +1662,7 @@ def cliente_minha_conta(request, portal_token):
         "historico_agendamentos": anteriores,
         "total_agendamentos": historico.count(),
         "cliente_has_portal_password": cliente.has_portal_password,
+        "fidelidade": fidelidade,
     })
 
 
@@ -1349,6 +1693,10 @@ def readyz(request):
         "checks": checks,
         "request_id": getattr(request, "request_id", "-"),
     }, status=status_code)
+
+
+def favicon_ico(_request):
+    return redirect(f"{settings.STATIC_URL}img/Logo.png")
 
 
 @require_http_methods(["POST"])
@@ -1451,4 +1799,102 @@ self.addEventListener('fetch', (event) => {
 });
 """
         return HttpResponse(content, content_type="application/javascript")
+
+
+@require_http_methods(["POST"])
+def ai_scheduling_chat_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    mensagem = (payload.get("mensagem") or "").strip()
+    telefone = re.sub(r"\D", "", payload.get("telefone") or "")
+    contexto = payload.get("contexto") or {}
+
+    if not mensagem:
+        return JsonResponse({"status": "erro", "message": "Mensagem obrigatoria."}, status=400)
+
+    result = handle_ai_scheduling_message(
+        empresa=empresa,
+        telefone=telefone,
+        mensagem=mensagem,
+        contexto=contexto,
+    )
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_usuario=request.user if request.user.is_authenticated else None,
+        acao="ai_scheduling_message",
+        entidade="agendamento",
+        detalhes={
+            "acao": result.get("acao"),
+            "telefone": telefone,
+            "mensagem": mensagem[:200],
+        },
+    )
+    return JsonResponse({
+        "status": "sucesso",
+        "resposta": result["resposta"],
+        "sugestoes": result.get("sugestoes", []),
+        "acao": result.get("acao"),
+        "contexto": result.get("contexto", {}),
+        "agendamento_id": result.get("agendamento_id"),
+    })
+
+
+@require_http_methods(["POST"])
+def ai_scheduling_dashboard_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"status": "erro", "message": "Sem permissao."}, status=403)
+
+    empresa = get_active_empresa(request)
+    if not empresa:
+        return JsonResponse({"status": "erro", "message": "Empresa nao selecionada."}, status=400)
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "erro", "message": "JSON invalido."}, status=400)
+
+    mensagem = (payload.get("mensagem") or "").strip()
+    telefone = re.sub(r"\D", "", payload.get("telefone") or "")
+    contexto = payload.get("contexto") or {}
+
+    if not mensagem:
+        return JsonResponse({"status": "erro", "message": "Mensagem obrigatoria."}, status=400)
+    if not telefone:
+        return JsonResponse({"status": "erro", "message": "Informe o telefone do cliente."}, status=400)
+
+    result = handle_ai_scheduling_message(
+        empresa=empresa,
+        telefone=telefone,
+        mensagem=mensagem,
+        contexto=contexto,
+    )
+    log_audit_event(
+        empresa=empresa,
+        request=request,
+        ator_usuario=request.user,
+        acao="ai_scheduling_dashboard_message",
+        entidade="agendamento",
+        detalhes={
+            "acao": result.get("acao"),
+            "telefone": telefone,
+            "mensagem": mensagem[:200],
+        },
+    )
+    return JsonResponse({
+        "status": "sucesso",
+        "resposta": result["resposta"],
+        "sugestoes": result.get("sugestoes", []),
+        "acao": result.get("acao"),
+        "contexto": result.get("contexto", {}),
+        "agendamento_id": result.get("agendamento_id"),
+    })
 

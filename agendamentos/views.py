@@ -18,6 +18,7 @@ from empresas.permissions import (
     user_can_access_module,
 )
 from core.notifications import notify_booking_created
+from core.loyalty import award_points_for_finalized_appointment
 from produtos.models import VendaProduto
 
 
@@ -229,6 +230,7 @@ def agendamentos_api(request):
         'confirmado': '#22c55e',
         'finalizado': '#38bdf8',
         'cancelado': '#ef4444',
+        'no_show': '#6b7280',
     }
 
     if include_agendamentos:
@@ -407,9 +409,10 @@ def mover_agendamento(request, pk):
 
 VALID_STATUS_TRANSITIONS = {
     'pendente': ['confirmado', 'cancelado'],
-    'confirmado': ['finalizado', 'cancelado'],
+    'confirmado': ['finalizado', 'cancelado', 'no_show'],
     'finalizado': [],
     'cancelado': [],
+    'no_show': [],
 }
 
 
@@ -446,6 +449,8 @@ def atualizar_status_agendamento(request, pk):
 
     agendamento.status = novo_status
     agendamento.save(update_fields=['status'])
+    if novo_status == 'finalizado':
+        award_points_for_finalized_appointment(agendamento)
 
     return JsonResponse({
         'status': 'ok',

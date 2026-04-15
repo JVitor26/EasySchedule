@@ -13,6 +13,9 @@
   data-move-url-template="{% url 'agendamentos_move' 999999 %}"
   data-edit-url-template="{% url 'agendamentos_edit' 999999 %}"
   data-status-url-template="{% url 'agendamentos_status' 999999 %}"
+  data-reminders-url="{% url 'reminders_dispatch_api' %}"
+  data-reengagement-url="{% url 'reengagement_dispatch_api' %}"
+  data-ai-chat-url="{% url 'ai_scheduling_dashboard_api' %}"
 >
   <div class="agenda-shell">
     <header class="agenda-hero">
@@ -27,13 +30,43 @@
 
       <div class="agenda-hero-actions">
         {% if not usuario_e_profissional %}
-        <a class="btn-success" href="{% url 'agendamentos_form' %}">Novo agendamento</a>
+        <a class="btn-success" href="#assistenteAgendamento">Agendar por texto ou audio</a>
+        <a class="btn-secondary" href="{% url 'agendamentos_form' %}">Agendamento detalhado</a>
         <a class="btn-secondary" href="{% url 'agendamentos_list' %}">Lista completa</a>
         {% else %}
         <a class="btn-secondary" href="{% url 'agendamentos_list' %}">Minha agenda</a>
         {% endif %}
       </div>
     </header>
+
+    <section class="agenda-card agenda-ai-card" id="assistenteAgendamento">
+      <div class="agenda-card-header">
+        <div>
+          <h2>Agendar por texto ou audio</h2>
+          <p>Digite ou grave o pedido do cliente aqui mesmo. Use o cadastro detalhado só quando precisar de algo mais especifico.</p>
+        </div>
+        <a class="btn-secondary" href="{% url 'agendamentos_form' %}">Cadastro detalhado</a>
+      </div>
+      <div class="ai-chat-grid">
+        <div class="agenda-filter-field">
+          <label for="aiChatPhone">Telefone do cliente</label>
+          <input id="aiChatPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(65) 99999-9999">
+        </div>
+        <div class="ai-chat-example">
+          <strong>Pedido rapido</strong>
+          <span>Corte com Rafael amanha as 15 horas</span>
+        </div>
+      </div>
+      <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite"></div>
+      <div id="aiChatSuggestions" class="ai-chat-suggestions"></div>
+      <div class="ai-chat-compose">
+        <input id="aiChatInput" type="text" autocomplete="off" enterkeyhint="send" placeholder="Ex.: Quero agendar corte com Rafael amanha a tarde">
+        <button type="button" class="btn-secondary" id="aiChatVoiceBtn" aria-pressed="false">Gravar audio</button>
+        <button type="button" class="btn-success" id="aiChatSendBtn">Enviar texto</button>
+      </div>
+      <p class="ai-chat-voice-status" id="aiChatVoiceStatus" aria-live="polite"></p>
+      <p class="agenda-feedback" id="aiChatFeedback" role="status"></p>
+    </section>
 
     <section class="agenda-metrics">
       {% if dashboard_widgets %}
@@ -43,6 +76,8 @@
             <strong class="metric-value">
               {% if widget.format == 'currency' %}
                 R$ {{ widget.value|floatformat:2 }}
+              {% elif widget.format == 'percent' %}
+                {{ widget.value }}%
               {% else %}
                 {{ widget.value }}
               {% endif %}
@@ -112,11 +147,62 @@
             <strong>{{ total_atendimentos_mes }}</strong>
           </div>
           <div class="summary-item">
+            <span>Faturamento total no mes</span>
+            <strong>R$ {{ total_faturamento_mes|floatformat:2 }}</strong>
+          </div>
+          <div class="summary-item">
             <span>Confirmados hoje</span>
             <strong>{{ confirmados_hoje }}</strong>
           </div>
+          <div class="summary-item">
+            <span>No-show no mes</span>
+            <strong>{{ no_show_mes }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Taxa de comparecimento</span>
+            <strong>{{ show_rate_month }}%</strong>
+          </div>
+          <div class="summary-item">
+            <span>Ticket medio</span>
+            <strong>R$ {{ avg_ticket_month|floatformat:2 }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>NPS do mes</span>
+            <strong>{{ nps_month }}</strong>
+          </div>
         </div>
       </article>
+    </section>
+
+    <section class="agenda-card">
+      <div class="agenda-card-header">
+        <div>
+          <h2>Clientes para reativacao</h2>
+          <p>Base com clientes sem retorno recente para campanhas de reengajamento.</p>
+        </div>
+        <button type="button" class="btn-success" id="dispararReengajamentoBtn">Disparar campanha</button>
+      </div>
+      {% if reativacao_candidatos %}
+      <div class="today-list">
+        {% for item in reativacao_candidatos %}
+        <article class="today-item">
+          <div class="today-time">{{ item.dias_sem_retorno }}d</div>
+          <div class="today-content">
+            <strong>{{ item.cliente_nome }}</strong>
+            <p>Ultimo servico: {{ item.ultimo_servico }} em {{ item.ultima_data|date:"d/m/Y" }}</p>
+            <small>{{ item.telefone }}</small>
+          </div>
+          <span class="agenda-status status-pendente">Reativar</span>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="agenda-empty">
+        <strong>Nenhum cliente pronto para reativacao.</strong>
+        <p>Quando houver clientes sem retorno, eles aparecerao aqui automaticamente.</p>
+      </div>
+      {% endif %}
+      <p class="agenda-feedback" id="campaignFeedback" role="status"></p>
     </section>
 
     {% if notificacoes_profissional %}
@@ -194,6 +280,7 @@
         <span><i class="legend-dot dot-confirmado"></i>Confirmado</span>
         <span><i class="legend-dot dot-finalizado"></i>Finalizado</span>
         <span><i class="legend-dot dot-cancelado"></i>Cancelado</span>
+        <span><i class="legend-dot" style="background:#6b7280;"></i>No-show</span>
         <span><i class="legend-dot" style="background:#f59e0b;"></i>Produto pendente</span>
         <span><i class="legend-dot" style="background:#0ea5e9;"></i>Produto pago</span>
       </div>
@@ -249,6 +336,7 @@
       <a class="btn-success" id="modalEditarLink" href="{% url 'agendamentos_list' %}">Editar agendamento</a>
       <button type="button" class="btn-primary agenda-status-btn" data-status="confirmado" style="display:none">✓ Confirmar</button>
       <button type="button" class="btn-primary agenda-status-btn" data-status="finalizado" style="display:none">✔ Finalizar</button>
+      <button type="button" class="btn-secondary agenda-status-btn" data-status="no_show" style="display:none">⚠ Marcar no-show</button>
       <button type="button" class="btn-danger agenda-status-btn" data-status="cancelado" style="display:none">✕ Cancelar</button>
       <button type="button" class="btn-secondary" id="modalFecharAcao">Fechar</button>
     </div>
@@ -265,5 +353,5 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/6.1.8/index.global.min.js"
   onerror="console.warn('FullCalendar fallback CDN também falhou.');">
 </script>
-<script src="{% static 'js/agenda.js' %}"></script>
+<script src="{% static 'js/agenda.js' %}?v=20260415a"></script>
 {% endblock %}

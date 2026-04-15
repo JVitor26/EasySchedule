@@ -72,6 +72,38 @@
                   <small>Ofertas e campanhas da empresa.</small>
                 </span>
               </label>
+              <label class="booking-type-option">
+                <input type="checkbox" name="receber_lembrete_24h" {% if preferencia.receber_lembrete_24h %}checked{% endif %}>
+                <span class="booking-type-copy">
+                  <strong>Lembrete 24h</strong>
+                  <small>Aviso um dia antes do atendimento.</small>
+                </span>
+              </label>
+              <label class="booking-type-option">
+                <input type="checkbox" name="receber_lembrete_2h" {% if preferencia.receber_lembrete_2h %}checked{% endif %}>
+                <span class="booking-type-copy">
+                  <strong>Lembrete 2h</strong>
+                  <small>Aviso proximo ao horario reservado.</small>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="client-form-group client-form-group-full">
+            <label>Fidelidade e indicacao</label>
+            <div class="booking-type-grid">
+              <label class="booking-type-option">
+                <span class="booking-type-copy">
+                  <strong>Pontos disponiveis: {{ fidelidade.pontos_disponiveis }}</strong>
+                  <small>Pontos totais acumulados: {{ fidelidade.pontos_totais }}</small>
+                </span>
+              </label>
+              <label class="booking-type-option">
+                <span class="booking-type-copy">
+                  <strong>Seu codigo de indicacao</strong>
+                  <small>{{ fidelidade.codigo_indicacao|default:"Gerado automaticamente no primeiro acesso" }}</small>
+                </span>
+              </label>
             </div>
           </div>
 

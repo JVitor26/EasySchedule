@@ -2,6 +2,13 @@
     width: 100%;
 }
 
+.agenda-page .btn-success,
+.agenda-page .btn-secondary,
+.agenda-page .btn-primary,
+.agenda-page .btn-danger {
+    border-radius: 8px;
+}
+
 .agenda-shell {
     display: flex;
     flex-direction: column;
@@ -292,6 +299,120 @@
     color: var(--success);
 }
 
+.agenda-ai-card {
+    scroll-margin-top: 6rem;
+}
+
+.agenda-ai-card .btn-success,
+.agenda-ai-card .btn-secondary {
+    border-radius: 8px;
+}
+
+.ai-chat-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.7fr);
+    gap: 1rem;
+    align-items: end;
+}
+
+.ai-chat-example {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface-soft);
+}
+
+.ai-chat-example strong {
+    color: var(--text-1);
+    font-size: 0.85rem;
+}
+
+.ai-chat-example span {
+    color: var(--text-2);
+    line-height: 1.5;
+}
+
+.ai-chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    min-height: 8rem;
+    max-height: 18rem;
+    margin-top: 1rem;
+    padding: 0.95rem;
+    overflow-y: auto;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface-soft);
+}
+
+.ai-chat-message {
+    max-width: min(42rem, 86%);
+    padding: 0.75rem 0.9rem;
+    border-radius: 8px;
+    color: var(--text-1);
+    line-height: 1.55;
+}
+
+.ai-chat-message.user {
+    align-self: flex-end;
+    background: var(--accent-soft);
+    color: var(--accent-2);
+}
+
+.ai-chat-message.bot {
+    align-self: flex-start;
+    background: var(--surface-1);
+    border: 1px solid var(--border-soft);
+}
+
+.ai-chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.85rem;
+}
+
+.ai-chat-suggestion {
+    min-height: 2.5rem;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--text-1);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ai-chat-suggestion:hover,
+.ai-chat-suggestion:focus {
+    border-color: var(--border-strong);
+    background: var(--surface-soft-strong);
+}
+
+.ai-chat-compose {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.85rem;
+}
+
+.ai-chat-voice-status {
+    min-height: 1.35rem;
+    margin: 0.6rem 0 0;
+    color: var(--text-3);
+    font-size: 0.92rem;
+}
+
+#aiChatVoiceBtn.is-listening {
+    border-color: var(--warning);
+    color: var(--warning) !important;
+}
+
 .agenda-legend {
     display: flex;
     flex-wrap: wrap;
@@ -569,6 +690,8 @@
 }
 
 .agenda-modal-actions .btn-success,
+.agenda-modal-actions .btn-primary,
+.agenda-modal-actions .btn-danger,
 .agenda-modal-actions .btn-secondary {
     min-width: 11rem;
 }
@@ -598,10 +721,14 @@
 }
 
 @media (max-width: 720px) {
+    .agenda-shell {
+        gap: 1rem;
+    }
+
     .agenda-card,
     .agenda-modal-box {
         padding: 1rem;
-        border-radius: 1.15rem;
+        border-radius: 8px;
     }
 
     .agenda-copy h1 {
@@ -616,12 +743,110 @@
         max-width: 34rem;
     }
 
+    .agenda-card-header {
+        gap: 0.7rem;
+        margin-bottom: 0.85rem;
+    }
+
+    .agenda-card-header h2 {
+        font-size: 1.05rem;
+    }
+
     .agenda-metrics,
     .agenda-overview,
     .summary-grid,
+    .ai-chat-grid,
     .agenda-filter-grid,
     .agenda-modal-grid {
         grid-template-columns: 1fr;
+    }
+
+    .agenda-ai-card {
+        scroll-margin-top: 1rem;
+    }
+
+    .agenda-ai-card input,
+    .agenda-ai-card button,
+    .agenda-filter-field input,
+    .agenda-filter-field select {
+        min-height: 3.2rem;
+        font-size: 1rem;
+    }
+
+    .ai-chat-compose {
+        grid-template-columns: 1fr;
+        gap: 0.6rem;
+    }
+
+    .agenda-ai-card .agenda-card-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .agenda-ai-card .agenda-card-header .btn-secondary,
+    .ai-chat-compose .btn-success,
+    .ai-chat-compose .btn-secondary {
+        width: 100%;
+    }
+
+    .ai-chat-example {
+        padding: 0.75rem;
+    }
+
+    .ai-chat-messages {
+        min-height: 6.5rem;
+        max-height: 34vh;
+        padding: 0.7rem;
+        gap: 0.55rem;
+    }
+
+    .ai-chat-message {
+        max-width: 100%;
+        padding: 0.7rem 0.8rem;
+        word-break: break-word;
+    }
+
+    .ai-chat-suggestions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    .ai-chat-suggestion {
+        width: 100%;
+        min-height: 2.9rem;
+        padding: 0.65rem 0.55rem;
+        text-align: center;
+    }
+
+    .ai-chat-voice-status,
+    .agenda-feedback {
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+
+    .agenda-calendar-card {
+        overflow: hidden;
+    }
+
+    .agenda-calendar-card .agenda-card-header p {
+        margin-top: 0.35rem;
+    }
+
+    .agenda-filter-grid {
+        gap: 0.75rem;
+    }
+
+    .agenda-legend {
+        gap: 0.55rem;
+        font-size: 0.82rem;
+    }
+
+    .agenda-legend span {
+        min-height: 2rem;
+        padding: 0.25rem 0.45rem;
+        border-radius: 8px;
+        background: var(--surface-soft);
     }
 
     .today-item {
@@ -667,23 +892,62 @@
     .agenda-hero-actions .btn-secondary,
     .agenda-filter-actions .btn-secondary,
     .agenda-modal-actions .btn-success,
+    .agenda-modal-actions .btn-primary,
+    .agenda-modal-actions .btn-danger,
     .agenda-modal-actions .btn-secondary {
         width: 100%;
         min-width: 0;
     }
 
     #calendar {
-        min-height: 32rem;
+        min-height: 26rem;
         font-size: 0.82rem;
+    }
+
+    .fc .fc-toolbar.fc-header-toolbar {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 0.6rem;
+    }
+
+    .fc .fc-toolbar-chunk {
+        display: flex;
+        justify-content: center;
+        gap: 0.4rem;
     }
 
     .fc-toolbar-title {
         font-size: 1.15rem !important;
+        text-align: center;
     }
 
     .fc .fc-button-primary {
+        min-height: 2.7rem !important;
         padding: 0.58rem 0.78rem !important;
+        border-radius: 8px !important;
         font-size: 0.82rem !important;
+    }
+
+    .fc-event {
+        border-radius: 8px !important;
+        padding: 0.28rem 0.42rem !important;
+        font-size: 0.74rem !important;
+    }
+
+    .fc-list-event-title,
+    .fc-list-event-time {
+        font-size: 0.88rem;
+    }
+
+    .agenda-modal {
+        overflow-y: auto;
+        padding: 0.85rem;
+    }
+
+    .agenda-modal-box {
+        width: 100%;
+        margin: 0;
     }
 }
 
@@ -691,7 +955,7 @@
     .agenda-card,
     .agenda-modal-box {
         padding: 0.9rem;
-        border-radius: 1rem;
+        border-radius: 8px;
     }
 
     .metric-label,
@@ -707,5 +971,42 @@
     .today-content small {
         font-size: 0.85rem;
     }
+
+    .agenda-hero-actions {
+        gap: 0.55rem;
+    }
+
+    .ai-chat-suggestions {
+        grid-template-columns: 1fr;
+    }
+
+    .ai-chat-example {
+        display: none;
+    }
+
+    .ai-chat-messages {
+        max-height: 30vh;
+    }
+
+    .agenda-filter-field {
+        gap: 0.4rem;
+    }
+
+    .agenda-legend {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #calendar {
+        min-height: 22rem;
+    }
+
+    .fc .fc-toolbar-chunk {
+        flex-wrap: wrap;
+    }
+
+    .fc .fc-button-primary {
+        flex: 1 1 auto;
+        min-width: 4.5rem;
     }
 }

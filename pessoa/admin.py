@@ -1,3 +1,10 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import Pessoa
+
+
+@admin.register(Pessoa)
+class PessoaAdmin(admin.ModelAdmin):
+    list_display = ("nome", "empresa", "telefone", "email", "documento")
+    list_filter = ("empresa",)
+    search_fields = ("nome", "telefone", "email", "documento")

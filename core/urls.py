@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("favicon.ico", views.favicon_ico, name="favicon_ico"),
     path('healthz/', views.healthz, name='healthz'),
     path('readyz/', views.readyz, name='readyz'),
     path('stripe/webhook/', views.stripe_webhook, name='stripe_webhook'),
@@ -26,6 +27,16 @@ urlpatterns = [
     path('cliente/empresa/<uuid:portal_token>/api/portal/validar-otp/', views.portal_validar_otp_api, name='portal_validar_otp_api'),
     path('cliente/empresa/<uuid:portal_token>/api/portal/logout/', views.portal_logout_api, name='portal_logout_api'),
     path('cliente/empresa/<uuid:portal_token>/api/agendamentos/', views.cliente_agendamentos_api, name='cliente_agendamentos_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/agendamentos/<int:agendamento_id>/confirmar/', views.cliente_agendamento_confirmar_api, name='cliente_agendamento_confirmar_api'),
     path('cliente/empresa/<uuid:portal_token>/api/agendamentos/<int:agendamento_id>/cancelar/', views.cliente_agendamento_cancelar_api, name='cliente_agendamento_cancelar_api'),
     path('cliente/empresa/<uuid:portal_token>/api/agendamentos/<int:agendamento_id>/remarcar/', views.cliente_agendamento_remarcar_api, name='cliente_agendamento_remarcar_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/agendamentos/<int:agendamento_id>/reagendar/', views.cliente_agendamento_reagendar_api, name='cliente_agendamento_reagendar_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/fidelidade/', views.cliente_fidelidade_api, name='cliente_fidelidade_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/indicacao/aplicar/', views.cliente_aplicar_indicacao_api, name='cliente_aplicar_indicacao_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/fidelidade/resgatar/', views.cliente_fidelidade_resgatar_api, name='cliente_fidelidade_resgatar_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/ia/agendamento/chat/', views.ai_scheduling_chat_api, name='ai_scheduling_chat_api'),
+    path('dashboard/api/ia/agendamento/chat/', views.ai_scheduling_dashboard_api, name='ai_scheduling_dashboard_api'),
+    path('cliente/empresa/<uuid:portal_token>/api/nps/enviar/', views.nps_submit_api, name='nps_submit_api'),
+    path('dashboard/api/reminders/disparar/', views.reminders_dispatch_api, name='reminders_dispatch_api'),
+    path('dashboard/api/reengagement/disparar/', views.reengagement_dispatch_api, name='reengagement_dispatch_api'),
 ]

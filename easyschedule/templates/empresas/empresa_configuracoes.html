@@ -117,6 +117,13 @@
         </div>
 
         <div class="form-group full">
+          <label for="id_texto_cabecalho">Texto do cabecalho (opcional)</label>
+          {{ form.texto_cabecalho }}
+          <small class="field-help">Esse texto aparece abaixo do nome da empresa no topo do sistema.</small>
+          {{ form.texto_cabecalho.errors }}
+        </div>
+
+        <div class="form-group full">
           <label>Links publicos da empresa</label>
           <small class="field-help">Compartilhe estes links com seus clientes. Eles mostram apenas o portal da sua empresa.</small>
           <div class="file-preview-card" style="width: 100%; gap: 0.85rem;">
