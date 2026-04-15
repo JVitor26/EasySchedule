@@ -31,6 +31,35 @@ PHONE_WORDS = {
     "nove": "9",
 }
 
+WEEKDAY_NAMES = {
+    "segunda": 0,
+    "segunda feira": 0,
+    "terca": 1,
+    "terca feira": 1,
+    "terça": 1,
+    "terça feira": 1,
+    "quarta": 2,
+    "quarta feira": 2,
+    "quinta": 3,
+    "quinta feira": 3,
+    "sexta": 4,
+    "sexta feira": 4,
+    "sabado": 5,
+    "sabado feira": 5,
+    "sábado": 5,
+    "domingo": 6,
+}
+
+WEEKDAY_LABELS = {
+    0: "segunda feira",
+    1: "terca feira",
+    2: "quarta feira",
+    3: "quinta feira",
+    4: "sexta feira",
+    5: "sabado",
+    6: "domingo",
+}
+
 
 def _normalize_text(value):
     normalized = unicodedata.normalize("NFKD", value or "")
@@ -85,13 +114,13 @@ def _extract_phone_from_text(text):
 
 def _parse_cliente_name(text):
     lowered = _normalize_text(text)
-    match = re.search(r"\b(?:cliente|nome)\s+([a-z ]{2,80})", lowered)
+    match = re.search(r"\b(?:cliente|nome)\s+(?:o|a|do|da|de)?\s*([a-z ]{2,80})", lowered)
     if not match:
         return ""
 
     name = match.group(1)
     stop_match = re.search(
-        r"\b(?:telefone|whatsapp|zap|celular|fone|servico|serviço|corte|barba|unha|massagem|sobrancelha|com|hoje|amanha|dia|data|as|horas?)\b",
+        r"\b(?:telefone|whatsapp|zap|celular|fone|servico|serviço|corte|barba|unha|massagem|sobrancelha|com|na|no|para|hoje|amanha|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|domingo|dia|data|as|horas?)\b",
         name,
     )
     if stop_match:
@@ -103,6 +132,14 @@ def _parse_cliente_name(text):
     return name[:80].title()
 
 
+def _date_for_next_weekday(target_weekday):
+    today = timezone.localdate()
+    days_ahead = target_weekday - today.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    return today + timedelta(days=days_ahead)
+
+
 def _parse_date_from_text(text):
     lowered = _normalize_text(text)
     today = timezone.localdate()
@@ -111,6 +148,10 @@ def _parse_date_from_text(text):
         return today + timedelta(days=1)
     if "hoje" in lowered:
         return today
+
+    for label, weekday in sorted(WEEKDAY_NAMES.items(), key=lambda item: len(item[0]), reverse=True):
+        if re.search(rf"\b{re.escape(_normalize_text(label))}\b", lowered):
+            return _date_for_next_weekday(weekday)
 
     match = re.search(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{4}))?\b", lowered)
     if match:
@@ -135,6 +176,16 @@ def _parse_date_from_text(text):
         except ValueError:
             return None
     return None
+
+
+def _build_date_suggestions():
+    today = timezone.localdate()
+    suggestions = ["hoje", "amanha"]
+    for days_ahead in range(1, 7):
+        label = WEEKDAY_LABELS[(today + timedelta(days=days_ahead)).weekday()]
+        if label not in suggestions:
+            suggestions.append(label)
+    return suggestions
 
 
 def _parse_time_from_text(text):
@@ -189,6 +240,29 @@ def _resolve_profissional(empresa, text):
         name = _normalize_text(profissional.nome)
         if name and name in lowered:
             return profissional
+    return None
+
+
+def _resolve_cliente_by_name(empresa, name):
+    normalized_name = _normalize_text(name)
+    if not normalized_name:
+        return None
+
+    clientes = list(Pessoa.objects.filter(empresa=empresa).order_by("nome"))
+    for cliente in clientes:
+        if _normalize_text(cliente.nome) == normalized_name:
+            return cliente
+
+    if len(normalized_name) < 3:
+        return None
+
+    matches = [
+        cliente
+        for cliente in clientes
+        if normalized_name in _normalize_text(cliente.nome)
+    ]
+    if len(matches) == 1:
+        return matches[0]
     return None
 
 
@@ -283,28 +357,29 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
     text = _normalize_text(mensagem)
     telefone = _clean_phone_candidate(telefone) or booking.get("telefone") or _extract_phone_from_text(mensagem)
 
-    if not telefone:
-        context["booking"] = booking
-        return {
-            "resposta": "Fale ou digite o telefone do cliente para continuar o agendamento.",
-            "contexto": context,
-            "sugestoes": [],
-            "acao": "pedir_telefone",
-            "telefone": "",
-            "cliente_info": _cliente_info(),
-        }
-
-    booking["telefone"] = telefone
-
     possible_name = _parse_cliente_name(mensagem)
     if possible_name and not booking.get("nome_cliente"):
         booking["nome_cliente"] = possible_name
 
-    cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
+    cliente = None
+    if telefone:
+        cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
+    if cliente is None and booking.get("cliente_id"):
+        cliente = Pessoa.objects.filter(empresa=empresa, pk=booking["cliente_id"]).first()
+    if cliente is None and booking.get("nome_cliente"):
+        cliente = _resolve_cliente_by_name(empresa, booking["nome_cliente"])
+        if cliente and not telefone:
+            telefone = cliente.telefone
+
+    if telefone:
+        booking["telefone"] = telefone
+
     cliente_cadastrado = cliente is not None
     if cliente:
         booking["cliente_id"] = cliente.id
         booking["nome_cliente"] = cliente.nome
+        booking["telefone"] = cliente.telefone
+        telefone = cliente.telefone
 
     cliente_info = _cliente_info(cliente, telefone=telefone, cadastrado=cliente_cadastrado)
     prefix = _cliente_status_prefix(cliente_info, booking.get("cliente_status_informado"))
@@ -348,6 +423,20 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
     if period:
         booking["periodo"] = period
 
+    if not telefone:
+        context["booking"] = booking
+        cliente_hint = ""
+        if booking.get("nome_cliente"):
+            cliente_hint = f"Nao encontrei cadastro para {booking['nome_cliente']}. "
+        return {
+            "resposta": f"{cliente_hint}Fale ou digite o telefone do cliente para continuar o agendamento.",
+            "contexto": context,
+            "sugestoes": [],
+            "acao": "pedir_telefone",
+            "telefone": "",
+            "cliente_info": _cliente_info(),
+        }
+
     wants_confirm = any(
         term in f" {text} "
         for term in (
@@ -375,8 +464,8 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
 
     if not booking.get("data"):
         return finish({
-            "resposta": "Qual data voce quer? (ex.: amanha, 15/04 ou 2026-04-15)",
-            "sugestoes": ["hoje", "amanha"],
+            "resposta": "Qual data voce quer? Pode falar hoje, amanha, sexta feira ou uma data como 15/04.",
+            "sugestoes": _build_date_suggestions(),
             "acao": "pedir_data",
         })
 
@@ -385,8 +474,8 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
     except ValidationError:
         booking.pop("data", None)
         return finish({
-            "resposta": "Nao entendi a data. Envie no formato 15/04, amanha ou 2026-04-15.",
-            "sugestoes": ["amanha"],
+            "resposta": "Nao entendi a data. Fale um dia da semana, amanha, ou uma data como 15/04.",
+            "sugestoes": _build_date_suggestions(),
             "acao": "pedir_data",
         })
     slots = list_available_slots(

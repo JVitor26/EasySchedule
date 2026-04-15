@@ -1074,6 +1074,22 @@ class AISchedulingChatTests(TestCase):
         self.assertEqual(payload["status"], "sucesso")
         self.assertEqual(payload["acao"], "pedir_servico")
 
+    def test_ai_chat_sugere_dias_da_semana_quando_pede_data(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "telefone": "65999991111",
+                "mensagem": "Corte completo com Rafael",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "pedir_data")
+        self.assertIn("sexta feira", payload["sugestoes"])
+
     def test_ai_chat_entende_audio_transcrito_com_acentos(self):
         self.client.force_login(self.owner)
         url = reverse("ai_scheduling_dashboard_api")
@@ -1132,6 +1148,76 @@ class AISchedulingChatTests(TestCase):
         self.assertTrue(payload["cliente_info"]["cadastrado"])
         self.assertEqual(payload["cliente_info"]["nome"], "Marina Cliente")
         self.assertIn("Cliente encontrado: Marina Cliente", payload["resposta"])
+
+    def test_ai_chat_entende_cliente_por_nome_e_data_por_dia_da_semana(self):
+        cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Marina Cliente",
+            telefone="65988887777",
+            email="marina@example.com",
+            documento="12345678901",
+            data_nascimento=timezone.localdate() - timedelta(days=9000),
+        )
+        dias_ate_sexta = 4 - timezone.localdate().weekday()
+        if dias_ate_sexta <= 0:
+            dias_ate_sexta += 7
+        proxima_sexta = timezone.localdate() + timedelta(days=dias_ate_sexta)
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "com o cliente Marina Cliente na sexta feira Corte completo com Rafael",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "pedir_horario")
+        self.assertEqual(payload["telefone"], cliente.telefone)
+        self.assertTrue(payload["cliente_info"]["cadastrado"])
+        self.assertEqual(payload["contexto"]["booking"]["data"], proxima_sexta.isoformat())
+        self.assertEqual(payload["contexto"]["booking"]["servico_id"], self.servico.id)
+        self.assertEqual(payload["contexto"]["booking"]["profissional_id"], self.profissional.id)
+
+    def test_ai_chat_preserva_dados_do_audio_quando_ainda_falta_telefone(self):
+        dias_ate_sexta = 4 - timezone.localdate().weekday()
+        if dias_ate_sexta <= 0:
+            dias_ate_sexta += 7
+        proxima_sexta = timezone.localdate() + timedelta(days=dias_ate_sexta)
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "com o cliente Laura na sexta feira Corte completo com Rafael",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "pedir_telefone")
+        self.assertIn("Nao encontrei cadastro para Laura", payload["resposta"])
+        self.assertEqual(payload["contexto"]["booking"]["nome_cliente"], "Laura")
+        self.assertEqual(payload["contexto"]["booking"]["data"], proxima_sexta.isoformat())
+        self.assertEqual(payload["contexto"]["booking"]["servico_id"], self.servico.id)
+        self.assertEqual(payload["contexto"]["booking"]["profissional_id"], self.profissional.id)
+
+        continuation = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "telefone 65 97777 1111",
+                "contexto": payload["contexto"],
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(continuation.status_code, 200)
+        continuation_payload = continuation.json()
+        self.assertEqual(continuation_payload["acao"], "pedir_horario")
+        self.assertEqual(continuation_payload["contexto"]["booking"]["data"], proxima_sexta.isoformat())
 
     def test_ai_chat_cria_pendente_para_cliente_nao_cadastrado_por_audio(self):
         self.client.force_login(self.owner)
