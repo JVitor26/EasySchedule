@@ -9,6 +9,8 @@
   class="client-company-page"
   data-slots-url="{% url 'cliente_horarios' empresa.portal_token %}"
   data-slot-hold-url="{% url 'cliente_slot_hold_api' empresa.portal_token %}"
+  data-client-lookup-url="{% url 'cliente_lookup_api' empresa.portal_token %}"
+  data-ai-chat-url="{% url 'ai_scheduling_chat_api' empresa.portal_token %}"
 >
   <div class="client-company-shell">
     <header class="client-company-hero">
@@ -88,6 +90,7 @@
             <strong>{{ servico.nome }}</strong>
             <span>{{ servico.tempo }} min</span>
             <small>R$ {{ servico.preco|floatformat:2 }}</small>
+            <a class="back-link" href="{% url 'cliente_agendar_servico' empresa.portal_token servico.id %}" style="margin-top:0.55rem;">Agendar este servico</a>
           </article>
           {% empty %}
           <p class="client-empty-inline">A empresa ainda nao cadastrou servicos publicos.</p>
@@ -109,6 +112,7 @@
             <strong>{{ profissional.nome }}</strong>
             <span>{{ profissional.especialidade }}</span>
             <small>Disponivel para novos horarios</small>
+            <a class="back-link" href="{% url 'cliente_agendar_profissional' empresa.portal_token profissional.id %}" style="margin-top:0.55rem;">Agendar com {{ profissional.nome }}</a>
           </article>
           {% empty %}
           <p class="client-empty-inline">A empresa ainda nao cadastrou profissionais ativos.</p>
@@ -189,8 +193,8 @@
     <section class="client-booking-card">
       <div class="client-panel-header">
         <div>
-          <h2>Cadastre-se e escolha o formato</h2>
-          <p>Monte um agendamento avulso, um pacote mensal ou confirme somente produtos com retirada/entrega.</p>
+          <h2>Agende em 3 passos</h2>
+          <p>Escolha o servico, pegue um horario livre e confirme com poucos dados.</p>
         </div>
       </div>
 
@@ -202,103 +206,170 @@
         <div class="client-form-errors">{{ form.non_field_errors }}</div>
         {% endif %}
 
-        <div class="client-form-grid">
-          <div class="client-form-group">
-            <label>{{ form.nome.label }}</label>
-            {{ form.nome }}
-            {{ form.nome.errors }}
-          </div>
-          <div class="client-form-group">
-            <label>{{ form.email.label }}</label>
-            {{ form.email }}
-            {{ form.email.errors }}
-          </div>
-          <div class="client-form-group">
-            <label>{{ form.telefone.label }}</label>
-            {{ form.telefone }}
-            {{ form.telefone.errors }}
-          </div>
-          <div class="client-form-group">
-            <label>{{ form.documento.label }}</label>
-            {{ form.documento }}
-            {{ form.documento.errors }}
-          </div>
-          <div class="client-form-group">
-            <label>{{ form.data_nascimento.label }}</label>
-            {{ form.data_nascimento }}
-            {{ form.data_nascimento.errors }}
-          </div>
-          <div class="client-form-group">
-            <label>{{ form.codigo_indicacao.label }}</label>
-            {{ form.codigo_indicacao }}
-            <small class="field-help">Use o codigo de quem te indicou para ativar beneficios.</small>
-            {{ form.codigo_indicacao.errors }}
-          </div>
-          <div class="client-form-group client-form-group-full">
-            <label>{{ form.tipo_reserva.label }}</label>
-            <div class="booking-type-grid">
-              {% for radio in form.tipo_reserva %}
-              <label class="booking-type-option">
-                {{ radio.tag }}
-                <span class="booking-type-copy">
-                  <strong>{{ radio.choice_label }}</strong>
-                  <small>
-                    {% if forloop.counter == 1 %}
-                    Reserve apenas um dia e depois siga para o checkout.
-                    {% elif forloop.counter == 2 %}
-                    Escolha um dia fixo da semana e um horario para repetir durante o mes.
-                    {% else %}
-                    Confirme apenas os produtos do carrinho para registrar a venda pendente e a entrega.
-                    {% endif %}
-                  </small>
-                </span>
-              </label>
-              {% endfor %}
-            </div>
-            {{ form.tipo_reserva.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
-            <label>{{ form.servico.label }}</label>
-            {{ form.servico }}
-            {{ form.servico.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
-            <label>{{ form.profissional.label }}</label>
-            {{ form.profissional }}
-            {{ form.profissional.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="avulso">
-            <label>{{ form.data.label }}</label>
-            {{ form.data }}
-            {{ form.data.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="pacote_mensal">
-            <label>{{ form.mes_referencia.label }}</label>
-            {{ form.mes_referencia }}
-            {{ form.mes_referencia.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="pacote_mensal">
-            <label>{{ form.dia_semana.label }}</label>
-            {{ form.dia_semana }}
-            {{ form.dia_semana.errors }}
-          </div>
-          <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
-            <label>{{ form.hora.label }}</label>
-            {{ form.hora }}
-            {{ form.hora.errors }}
-          </div>
-          <div class="client-form-group client-form-group-full">
-            <label>{{ form.observacoes.label }}</label>
-            {{ form.observacoes }}
-            {{ form.observacoes.errors }}
-          </div>
-          <div class="client-form-group client-form-group-full">
-            <label>{{ form.data_retirada_produtos.label }}</label>
-            {{ form.data_retirada_produtos }}
-            <small class="field-help">Se houver produtos no carrinho, informe o dia para retirada na empresa.</small>
-            {{ form.data_retirada_produtos.errors }}
-          </div>
+        <div class="booking-steps" aria-label="Etapas do agendamento">
+          <span>1. Escolha</span>
+          <span>2. Horario</span>
+          <span>3. Confirme</span>
         </div>
+
+        <section class="booking-assist-panel">
+          <div>
+            <strong>Agendar por mensagem</strong>
+            <p>Digite como voce falaria no WhatsApp. Ex.: Quero corte amanha depois das 15h.</p>
+          </div>
+          <div class="client-form-grid client-form-grid-compact">
+            <div class="client-form-group client-form-group-full">
+              <label for="clientAiInput">Pedido de agendamento</label>
+              <input id="clientAiInput" type="text" autocomplete="off" placeholder="Quero agendar corte amanha a tarde">
+            </div>
+            <div class="client-form-actions">
+              <button type="button" id="clientAiSendBtn" class="btn-secondary">Entender pedido</button>
+            </div>
+          </div>
+          <p id="clientAiFeedback" class="slots-feedback"></p>
+          <div id="clientAiSuggestions" class="quick-slot-grid"></div>
+        </section>
+
+        <section class="booking-step-card">
+          <div class="client-panel-header">
+            <div>
+              <h3>1. Escolha o que deseja</h3>
+              <p>Selecione o formato, o servico e deixe em qualquer profissional se quiser o primeiro encaixe livre.</p>
+            </div>
+          </div>
+          <div class="client-form-grid">
+            <div class="client-form-group client-form-group-full">
+              <label>{{ form.tipo_reserva.label }}</label>
+              <div class="booking-type-grid">
+                {% for radio in form.tipo_reserva %}
+                <label class="booking-type-option">
+                  {{ radio.tag }}
+                  <span class="booking-type-copy">
+                    <strong>{{ radio.choice_label }}</strong>
+                    <small>
+                      {% if forloop.counter == 1 %}
+                      Reserve apenas um dia e depois confirme.
+                      {% elif forloop.counter == 2 %}
+                      Escolha um dia fixo da semana e um horario para repetir durante o mes.
+                      {% else %}
+                      Confirme apenas os produtos do carrinho e a entrega.
+                      {% endif %}
+                    </small>
+                  </span>
+                </label>
+                {% endfor %}
+              </div>
+              {{ form.tipo_reserva.errors }}
+            </div>
+            <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
+              <label>{{ form.servico.label }}</label>
+              {{ form.servico }}
+              {{ form.servico.errors }}
+            </div>
+            <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
+              <label>{{ form.profissional.label }}</label>
+              {{ form.profissional }}
+              <small class="field-help">Deixe em qualquer profissional para ver o primeiro horario livre.</small>
+              {{ form.profissional.errors }}
+            </div>
+          </div>
+        </section>
+
+        <section class="booking-step-card">
+          <div class="client-panel-header">
+            <div>
+              <h3>2. Pegue o melhor horario</h3>
+              <p>Use o primeiro horario disponivel ou escolha uma data para ver os horarios livres.</p>
+            </div>
+          </div>
+          <div class="quick-booking-tools" data-booking-field="avulso">
+            <button type="button" id="firstAvailableBtn" class="btn-success">Primeiro horario disponivel</button>
+            <span class="field-help">O sistema procura nos proximos dias e ja escolhe profissional e horario.</span>
+          </div>
+          <div id="quickSlots" class="quick-slot-grid"></div>
+
+          <div class="client-form-grid">
+            <div class="client-form-group" data-booking-field="avulso">
+              <label>{{ form.data.label }}</label>
+              {{ form.data }}
+              {{ form.data.errors }}
+            </div>
+            <div class="client-form-group" data-booking-field="pacote_mensal">
+              <label>{{ form.mes_referencia.label }}</label>
+              {{ form.mes_referencia }}
+              {{ form.mes_referencia.errors }}
+            </div>
+            <div class="client-form-group" data-booking-field="pacote_mensal">
+              <label>{{ form.dia_semana.label }}</label>
+              {{ form.dia_semana }}
+              {{ form.dia_semana.errors }}
+            </div>
+            <div class="client-form-group" data-booking-field="avulso,pacote_mensal">
+              <label>{{ form.hora.label }}</label>
+              {{ form.hora }}
+              {{ form.hora.errors }}
+            </div>
+          </div>
+          <div id="slotChips" class="quick-slot-grid"></div>
+          <div id="bookingSummary" class="booking-summary-card" hidden></div>
+        </section>
+
+        <section class="booking-step-card">
+          <div class="client-panel-header">
+            <div>
+              <h3>3. Confirme seus dados</h3>
+              <p>Para clientes que ja voltaram antes, o WhatsApp preenche tudo que der para preencher.</p>
+            </div>
+          </div>
+          <div class="client-form-grid">
+            <div class="client-form-group">
+              <label>{{ form.telefone.label }}</label>
+              {{ form.telefone }}
+              {{ form.telefone.errors }}
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.nome.label }}</label>
+              {{ form.nome }}
+              {{ form.nome.errors }}
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.email.label }}</label>
+              {{ form.email }}
+              {{ form.email.errors }}
+            </div>
+            <div class="client-form-group client-form-group-full">
+              <p id="clientLookupFeedback" class="slots-feedback"></p>
+              <div id="repeatBookingBox" class="quick-slot-grid"></div>
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.documento.label }}</label>
+              {{ form.documento }}
+              {{ form.documento.errors }}
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.data_nascimento.label }}</label>
+              {{ form.data_nascimento }}
+              {{ form.data_nascimento.errors }}
+            </div>
+            <div class="client-form-group">
+              <label>{{ form.codigo_indicacao.label }}</label>
+              {{ form.codigo_indicacao }}
+              <small class="field-help">Use o codigo de quem te indicou para ativar beneficios.</small>
+              {{ form.codigo_indicacao.errors }}
+            </div>
+            <div class="client-form-group client-form-group-full">
+              <label>{{ form.observacoes.label }}</label>
+              {{ form.observacoes }}
+              {{ form.observacoes.errors }}
+            </div>
+            <div class="client-form-group client-form-group-full">
+              <label>{{ form.data_retirada_produtos.label }}</label>
+              {{ form.data_retirada_produtos }}
+              <small class="field-help">Se houver produtos no carrinho, informe o dia para retirada na empresa.</small>
+              {{ form.data_retirada_produtos.errors }}
+            </div>
+          </div>
+        </section>
 
         <p id="slotsFeedback" class="slots-feedback">Selecione servico, profissional e o formato desejado para ver os horarios livres.</p>
         <p id="slotHoldFeedback" class="slots-feedback"></p>
@@ -523,6 +594,9 @@ function renderAgendamentos(ags) {
       <small>Status: ${ag.status} • Pagamento: ${ag.pagamento_status}</small>
       <small>Valor: R$ ${parseFloat(ag.valor).toFixed(2)} • ${ag.tipo}</small>
       ${ag.pagamento_url ? `<a class="back-link" href="${ag.pagamento_url}" style="margin-top:0.4rem;">Pagar este agendamento</a>` : ''}
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
+        <button type="button" class="btn-success" onclick="agendarNovamente(${ag.servico_id}, ${ag.profissional_id})">Agendar novamente</button>
+      </div>
       ${ag.can_change ? `
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem;">
           <button type="button" class="btn-success" onclick="confirmarAgendamento(${ag.id})">Confirmar</button>
@@ -555,6 +629,16 @@ function renderLoyalty(data) {
   `;
   loyaltySummary.style.display = 'flex';
 }
+
+window.agendarNovamente = function(servicoId, profissionalId) {
+  const servicoSelect = document.getElementById('id_servico');
+  const profissionalSelect = document.getElementById('id_profissional');
+  if (servicoSelect) servicoSelect.value = String(servicoId);
+  if (profissionalSelect) profissionalSelect.value = String(profissionalId);
+  document.getElementById('bookingForm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('firstAvailableBtn')?.click();
+  setTrackFeedback('Atendimento anterior selecionado. Escolha um horario livre para repetir.', 'is-success');
+};
 
 async function carregarFidelidade() {
   const response = await fetch(`/cliente/empresa/${empresa_token}/api/fidelidade/`, {

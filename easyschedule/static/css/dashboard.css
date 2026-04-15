@@ -356,6 +356,20 @@
     color: var(--warning);
 }
 
+.ai-chat-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+    margin-top: 0.85rem;
+}
+
+.ai-chat-shortcuts span {
+    color: var(--text-2);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
 .ai-chat-messages {
     display: flex;
     flex-direction: column;

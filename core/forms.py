@@ -139,6 +139,7 @@ class PublicBookingForm(forms.Form):
         self.fields["tipo_reserva"].label = "Como deseja contratar"
         self.fields["servico"].label = profile["service_term_singular"]
         self.fields["profissional"].label = profile["professional_term_singular"]
+        self.fields["profissional"].empty_label = f"Qualquer {profile['professional_term_singular'].lower()}"
         self.fields["data"].label = f"Data do {profile['appointment_term_singular'].lower()}"
         self.fields["mes_referencia"].label = "Mes desejado para o pacote"
         self.fields["dia_semana"].label = "Dia fixo da semana"
@@ -181,6 +182,77 @@ class PublicBookingForm(forms.Form):
         if not value:
             return None
         return self.fields["profissional"].queryset.filter(pk=value).first()
+
+    def _get_professional_queryset(self):
+        return self.fields["profissional"].queryset
+
+    def _list_available_slots_for_professionals(self, servico, data, selected_professional=None, exclude_hold_token=None):
+        if selected_professional:
+            professionals = [selected_professional]
+        else:
+            professionals = list(self._get_professional_queryset())
+
+        slots_by_time = {}
+        for profissional in professionals:
+            slots = list_available_slots(
+                empresa=self.empresa,
+                profissional=profissional,
+                servico=servico,
+                data=data,
+                exclude_hold_token=exclude_hold_token,
+            )
+            for slot in slots:
+                slot_key = slot.strftime("%H:%M")
+                slots_by_time.setdefault(slot_key, {"slot": slot, "profissional": profissional})
+
+        return [slots_by_time[key] for key in sorted(slots_by_time)]
+
+    def _list_monthly_slots_for_professionals(self, servico, month_reference, weekday, selected_professional=None):
+        if selected_professional:
+            professionals = [selected_professional]
+        else:
+            professionals = list(self._get_professional_queryset())
+
+        slots_by_time = {}
+        occurrence_dates_by_time = {}
+        for profissional in professionals:
+            slots, occurrence_dates = list_monthly_available_slots(
+                empresa=self.empresa,
+                profissional=profissional,
+                servico=servico,
+                month_reference=month_reference,
+                weekday=weekday,
+            )
+            for slot in slots:
+                slot_key = slot.strftime("%H:%M")
+                slots_by_time.setdefault(slot_key, {"slot": slot, "profissional": profissional})
+                occurrence_dates_by_time.setdefault(slot_key, occurrence_dates)
+
+        return [slots_by_time[key] for key in sorted(slots_by_time)], occurrence_dates_by_time
+
+    def _resolve_professional_for_slot(self, servico, data, hora, selected_professional=None, exclude_hold_token=None):
+        slots = self._list_available_slots_for_professionals(
+            servico=servico,
+            data=data,
+            selected_professional=selected_professional,
+            exclude_hold_token=exclude_hold_token,
+        )
+        for item in slots:
+            if item["slot"].strftime("%H:%M") == hora:
+                return item["profissional"], item["slot"]
+        return None, None
+
+    def _resolve_professional_for_monthly_slot(self, servico, month_reference, weekday, hora, selected_professional=None):
+        slots, occurrence_dates_by_time = self._list_monthly_slots_for_professionals(
+            servico=servico,
+            month_reference=month_reference,
+            weekday=weekday,
+            selected_professional=selected_professional,
+        )
+        for item in slots:
+            if item["slot"].strftime("%H:%M") == hora:
+                return item["profissional"], item["slot"], occurrence_dates_by_time.get(hora, [])
+        return None, None, []
 
     def _get_selected_date(self):
         value = self._get_bound_value("data")
@@ -227,29 +299,37 @@ class PublicBookingForm(forms.Form):
             return
 
         if booking_type == "pacote_mensal":
-            if selected_service and selected_professional and selected_month and selected_weekday is not None:
-                slots, _occurrence_dates = list_monthly_available_slots(
-                    empresa=self.empresa,
-                    profissional=selected_professional,
+            if selected_service and selected_month and selected_weekday is not None:
+                slot_items, _occurrence_dates_by_time = self._list_monthly_slots_for_professionals(
                     servico=selected_service,
                     month_reference=selected_month,
                     weekday=selected_weekday,
+                    selected_professional=selected_professional,
                 )
+                slots = [item["slot"] for item in slot_items]
                 choices = [("", "Selecione um horario fixo")]
-                choices.extend((slot.strftime("%H:%M"), slot.strftime("%H:%M")) for slot in slots)
+                for item in slot_items:
+                    slot_label = item["slot"].strftime("%H:%M")
+                    if not selected_professional:
+                        slot_label = f"{slot_label} com {item['profissional'].nome}"
+                    choices.append((item["slot"].strftime("%H:%M"), slot_label))
                 if not slots:
                     choices = [("", "Nenhum horario fixo disponivel no mes")]
         else:
-            if selected_service and selected_professional and selected_date:
-                slots = list_available_slots(
-                    empresa=self.empresa,
-                    profissional=selected_professional,
+            if selected_service and selected_date:
+                slot_items = self._list_available_slots_for_professionals(
                     servico=selected_service,
                     data=selected_date,
+                    selected_professional=selected_professional,
                     exclude_hold_token=selected_hold_token,
                 )
+                slots = [item["slot"] for item in slot_items]
                 choices = [("", "Selecione um horario")]
-                choices.extend((slot.strftime("%H:%M"), slot.strftime("%H:%M")) for slot in slots)
+                for item in slot_items:
+                    slot_label = item["slot"].strftime("%H:%M")
+                    if not selected_professional:
+                        slot_label = f"{slot_label} com {item['profissional'].nome}"
+                    choices.append((item["slot"].strftime("%H:%M"), slot_label))
 
                 if not slots:
                     choices = [("", "Nenhum horario disponivel")]
@@ -499,8 +579,6 @@ class PublicBookingForm(forms.Form):
         if booking_type in ("avulso", "pacote_mensal"):
             if not servico:
                 self.add_error("servico", "Selecione um servico para continuar.")
-            if not profissional:
-                self.add_error("profissional", "Selecione um profissional para continuar.")
 
         if payload_items and not selected_products and not product_errors:
             self.add_error("produtos_json", "Selecione ao menos um produto valido no catalogo da empresa.")
@@ -525,22 +603,26 @@ class PublicBookingForm(forms.Form):
             mes_referencia = cleaned_data.get("mes_referencia")
             dia_semana = cleaned_data.get("dia_semana")
 
-            if not all([servico, profissional, mes_referencia, hora]) or dia_semana in (None, ""):
+            if not all([servico, mes_referencia, hora]) or dia_semana in (None, ""):
                 return cleaned_data
 
-            available_slots, occurrence_dates = list_monthly_available_slots(
-                empresa=self.empresa,
-                profissional=profissional,
+            resolved_professional, selected_slot, occurrence_dates = self._resolve_professional_for_monthly_slot(
                 servico=servico,
                 month_reference=mes_referencia,
                 weekday=dia_semana,
+                hora=hora,
+                selected_professional=profissional,
             )
-            selected_slot = next(
-                (slot for slot in available_slots if slot.strftime("%H:%M") == hora),
-                None,
+            available_slots, _occurrence_dates_by_time = self._list_monthly_slots_for_professionals(
+                servico=servico,
+                month_reference=mes_referencia,
+                weekday=dia_semana,
+                selected_professional=profissional,
             )
+            available_slot_times = [item["slot"] for item in available_slots]
+            candidate_plan_dates = list_monthly_occurrence_dates(mes_referencia, dia_semana)
 
-            if not occurrence_dates:
+            if not candidate_plan_dates:
                 self.add_error(
                     "mes_referencia",
                     "Nao existem datas futuras disponiveis nesse mes para o dia escolhido.",
@@ -548,7 +630,7 @@ class PublicBookingForm(forms.Form):
                 return cleaned_data
 
             if selected_slot is None:
-                sugestoes = ", ".join(slot.strftime("%H:%M") for slot in available_slots[:6])
+                sugestoes = ", ".join(slot.strftime("%H:%M") for slot in available_slot_times[:6])
                 if sugestoes:
                     self.add_error(
                         "hora",
@@ -561,37 +643,39 @@ class PublicBookingForm(forms.Form):
                         "Nao restaram horarios fixos disponiveis para esse pacote mensal.",
                     )
             else:
+                cleaned_data["profissional"] = resolved_professional
                 cleaned_data["hora_obj"] = selected_slot
-                cleaned_data["plan_dates"] = list_monthly_occurrence_dates(
-                    mes_referencia,
-                    dia_semana,
-                )
+                cleaned_data["plan_dates"] = occurrence_dates or candidate_plan_dates
 
             return cleaned_data
 
         data = cleaned_data.get("data")
-        if not all([servico, profissional, data, hora]):
+        if not all([servico, data, hora]):
             return cleaned_data
 
-        available_slots = list_available_slots(
-            empresa=self.empresa,
-            profissional=profissional,
+        resolved_professional, selected_slot = self._resolve_professional_for_slot(
             servico=servico,
             data=data,
+            hora=hora,
+            selected_professional=profissional,
             exclude_hold_token=cleaned_data.get("slot_hold_token"),
         )
-        selected_slot = next(
-            (slot for slot in available_slots if slot.strftime("%H:%M") == hora),
-            None,
+        available_slots = self._list_available_slots_for_professionals(
+            servico=servico,
+            data=data,
+            selected_professional=profissional,
+            exclude_hold_token=cleaned_data.get("slot_hold_token"),
         )
+        available_slot_times = [item["slot"] for item in available_slots]
 
         if selected_slot is None:
-            sugestoes = ", ".join(slot.strftime("%H:%M") for slot in available_slots[:6])
+            sugestoes = ", ".join(slot.strftime("%H:%M") for slot in available_slot_times[:6])
             if sugestoes:
                 self.add_error("hora", f"Esse horario acabou de ser ocupado. Horarios livres: {sugestoes}.")
             else:
                 self.add_error("hora", "Nao restaram horarios disponiveis para essa data.")
         else:
+            cleaned_data["profissional"] = resolved_professional
             cleaned_data["hora_obj"] = selected_slot
 
         return cleaned_data

@@ -1,11 +1,21 @@
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 
+from django.conf import settings
 from django.utils import timezone
 
 from agendamentos.models import Agendamento
 from core.loyalty import build_reengagement_candidates
 from core.models import ClientePortalPreferencia
 from core.notifications import send_email_message, send_whatsapp_message
+
+
+def _portal_url(empresa):
+    path = f"/cliente/empresa/{empresa.portal_token}/#meus-agendamentos"
+    base_url = getattr(settings, "STRIPE_DOMAIN_URL", "").strip()
+    if base_url:
+        return urljoin(f"{base_url.rstrip('/')}/", path.lstrip("/"))
+    return path
 
 
 def _dispatch_window(empresa, start_dt, end_dt, janela):
@@ -37,7 +47,8 @@ def _dispatch_window(empresa, start_dt, end_dt, janela):
         msg = (
             f"Lembrete {janela} - {agendamento.empresa.nome}\n"
             f"{agendamento.servico.nome} com {agendamento.profissional.nome}\n"
-            f"{agendamento.data.strftime('%d/%m/%Y')} às {agendamento.hora.strftime('%H:%M')}"
+            f"{agendamento.data.strftime('%d/%m/%Y')} às {agendamento.hora.strftime('%H:%M')}\n"
+            f"Confirmar, reagendar ou cancelar: {_portal_url(agendamento.empresa)}"
         )
         if pref.receber_whatsapp and agendamento.cliente.telefone:
             send_whatsapp_message(agendamento.cliente.telefone, msg)
@@ -77,7 +88,7 @@ def run_reengagement_for_empresa(empresa, limit=30):
         message = (
             f"{empresa.nome}: sentimos sua falta.\n"
             f"Seu último atendimento foi há {item['dias_sem_retorno']} dias.\n"
-            "Queremos te ver de novo. Responda esta mensagem para um novo horário."
+            f"Agende novamente aqui: {_portal_url(empresa)}"
         )
         if item.get("telefone"):
             send_whatsapp_message(item["telefone"], message)

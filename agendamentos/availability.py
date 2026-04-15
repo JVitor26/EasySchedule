@@ -72,7 +72,7 @@ def list_available_slots(
     if latest_start < day_start:
         return []
 
-    now = timezone.localtime(timezone.now())
+    now = timezone.localtime(timezone.now()).replace(tzinfo=None)
     if data < timezone.localdate():
         return []
 

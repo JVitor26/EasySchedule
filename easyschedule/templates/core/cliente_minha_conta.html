@@ -147,6 +147,10 @@
             <strong>{{ ag.data|date:'d/m/Y' }} as {{ ag.hora|time:'H:i' }}</strong>
             <span>{{ ag.servico.nome }} com {{ ag.profissional.nome }}</span>
             <small>Status: {{ ag.get_status_display }}</small>
+            <div class="client-success-actions">
+              <a class="btn-secondary" href="{% url 'cliente_empresa' empresa.portal_token %}#meus-agendamentos">Reagendar ou cancelar</a>
+              <a class="btn-success" href="{% url 'cliente_empresa' empresa.portal_token %}?repeat={{ ag.id }}&servico={{ ag.servico_id }}&profissional={{ ag.profissional_id }}#bookingForm">Agendar novamente</a>
+            </div>
           </article>
           {% empty %}
           <p class="client-empty-inline">Nenhum agendamento futuro no momento.</p>
@@ -167,6 +171,9 @@
             <strong>{{ ag.data|date:'d/m/Y' }} as {{ ag.hora|time:'H:i' }}</strong>
             <span>{{ ag.servico.nome }} com {{ ag.profissional.nome }}</span>
             <small>Status: {{ ag.get_status_display }}</small>
+            <div class="client-success-actions">
+              <a class="btn-success" href="{% url 'cliente_empresa' empresa.portal_token %}?repeat={{ ag.id }}&servico={{ ag.servico_id }}&profissional={{ ag.profissional_id }}#bookingForm">Agendar novamente</a>
+            </div>
           </article>
           {% empty %}
           <p class="client-empty-inline">Seu historico ainda esta vazio.</p>

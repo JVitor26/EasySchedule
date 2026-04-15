@@ -25,6 +25,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const elements = {
         slotsUrl: page.dataset.slotsUrl,
         slotHoldUrl: page.dataset.slotHoldUrl,
+        clientLookupUrl: page.dataset.clientLookupUrl,
+        aiChatUrl: page.dataset.aiChatUrl,
+        nome: document.getElementById("id_nome"),
+        email: document.getElementById("id_email"),
+        telefone: document.getElementById("id_telefone"),
+        documento: document.getElementById("id_documento"),
+        dataNascimento: document.getElementById("id_data_nascimento"),
         servico: document.getElementById("id_servico"),
         profissional: document.getElementById("id_profissional"),
         data: document.getElementById("id_data"),
@@ -37,6 +44,16 @@ document.addEventListener("DOMContentLoaded", () => {
         bookingForm: document.getElementById("bookingForm"),
         bookingTypeInputs,
         bookingFields: Array.from(document.querySelectorAll("[data-booking-field]")),
+        quickSlots: document.getElementById("quickSlots"),
+        slotChips: document.getElementById("slotChips"),
+        firstAvailableBtn: document.getElementById("firstAvailableBtn"),
+        bookingSummary: document.getElementById("bookingSummary"),
+        clientLookupFeedback: document.getElementById("clientLookupFeedback"),
+        repeatBookingBox: document.getElementById("repeatBookingBox"),
+        clientAiInput: document.getElementById("clientAiInput"),
+        clientAiSendBtn: document.getElementById("clientAiSendBtn"),
+        clientAiFeedback: document.getElementById("clientAiFeedback"),
+        clientAiSuggestions: document.getElementById("clientAiSuggestions"),
     };
 
     function readCookie(name) {
@@ -97,6 +114,28 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.holdFeedback.classList.remove("is-loading", "is-success", "is-error");
         if (state) {
             elements.holdFeedback.classList.add(state);
+        }
+    }
+
+    function setClientLookupFeedback(message, state = "") {
+        if (!elements.clientLookupFeedback) {
+            return;
+        }
+        elements.clientLookupFeedback.textContent = message || "";
+        elements.clientLookupFeedback.classList.remove("is-loading", "is-success", "is-error");
+        if (state) {
+            elements.clientLookupFeedback.classList.add(state);
+        }
+    }
+
+    function setAiFeedback(message, state = "") {
+        if (!elements.clientAiFeedback) {
+            return;
+        }
+        elements.clientAiFeedback.textContent = message || "";
+        elements.clientAiFeedback.classList.remove("is-loading", "is-success", "is-error");
+        if (state) {
+            elements.clientAiFeedback.classList.add(state);
         }
     }
 
@@ -204,7 +243,116 @@ document.addEventListener("DOMContentLoaded", () => {
             const item = document.createElement("option");
             item.value = option.value;
             item.textContent = option.label;
+            if (option.profissional_id) {
+                item.dataset.profissionalId = option.profissional_id;
+            }
             elements.hora.appendChild(item);
+        });
+    }
+
+    function ensureHourOption(value, label, profissionalId = "") {
+        if (!value || !elements.hora) {
+            return;
+        }
+        const existing = Array.from(elements.hora.options).find((option) => option.value === value);
+        if (existing) {
+            if (profissionalId) {
+                existing.dataset.profissionalId = profissionalId;
+            }
+            return;
+        }
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label || value;
+        if (profissionalId) {
+            option.dataset.profissionalId = profissionalId;
+        }
+        elements.hora.appendChild(option);
+    }
+
+    function getSelectedText(select) {
+        if (!select || select.selectedIndex < 0) {
+            return "";
+        }
+        return select.options[select.selectedIndex]?.textContent?.trim() || "";
+    }
+
+    function updateBookingSummary(extra = {}) {
+        if (!elements.bookingSummary) {
+            return;
+        }
+
+        const serviceLabel = getSelectedText(elements.servico);
+        const professionalLabel = extra.profissionalNome || getSelectedText(elements.profissional) || "Qualquer profissional";
+        const dateLabel = extra.dataLabel || elements.data?.value || "";
+        const hourLabel = extra.hora || elements.hora?.value || "";
+
+        if (!serviceLabel || !hourLabel || getBookingType() !== "avulso") {
+            elements.bookingSummary.hidden = true;
+            elements.bookingSummary.innerHTML = "";
+            return;
+        }
+
+        elements.bookingSummary.hidden = false;
+        elements.bookingSummary.innerHTML = `
+            <strong>Resumo da reserva</strong>
+            <span>${serviceLabel}</span>
+            <span>${professionalLabel}</span>
+            <span>${dateLabel} as ${hourLabel}</span>
+        `;
+    }
+
+    async function applySlotChoice(slot) {
+        if (!slot) {
+            return;
+        }
+
+        if (slot.data && elements.data) {
+            elements.data.value = slot.data;
+        }
+        if (slot.profissional_id && elements.profissional) {
+            elements.profissional.value = String(slot.profissional_id);
+        }
+        ensureHourOption(slot.hora || slot.value, slot.label, slot.profissional_id || "");
+        if (elements.hora) {
+            elements.hora.value = slot.hora || slot.value;
+        }
+
+        updateBookingSummary({
+            dataLabel: slot.data || elements.data?.value || "",
+            hora: slot.hora || slot.value,
+            profissionalNome: slot.profissional_nome || "",
+        });
+        await reserveSelectedSlotHold();
+    }
+
+    function renderSlotButtons(container, slots, emptyMessage = "") {
+        if (!container) {
+            return;
+        }
+
+        container.innerHTML = "";
+        if (!slots?.length) {
+            if (emptyMessage) {
+                const empty = document.createElement("p");
+                empty.className = "slots-feedback";
+                empty.textContent = emptyMessage;
+                container.appendChild(empty);
+            }
+            return;
+        }
+
+        slots.forEach((slot) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "quick-slot-chip";
+            button.textContent = slot.label || slot.value || slot.hora;
+            button.addEventListener("click", () => applySlotChoice({
+                ...slot,
+                hora: slot.hora || slot.value,
+                data: slot.data || elements.data?.value || "",
+            }));
+            container.appendChild(button);
         });
     }
 
@@ -224,14 +372,20 @@ document.addEventListener("DOMContentLoaded", () => {
             clearHoldState();
             setFeedback("Confirme os dados pessoais, a data de retirada/entrega e finalize somente os produtos do carrinho.");
             setOptions([], "Nao se aplica para compra somente de produtos");
+            renderSlotButtons(elements.quickSlots, []);
+            renderSlotButtons(elements.slotChips, []);
         } else if (bookingType === "pacote_mensal") {
             clearHoldState();
-            setFeedback("Selecione servico, profissional, mes e dia da semana para ver os horarios fixos do pacote.");
+            setFeedback("Selecione servico, mes e dia da semana para ver os horarios fixos do pacote.");
             setOptions([], "Selecione um horario fixo");
+            renderSlotButtons(elements.quickSlots, []);
+            renderSlotButtons(elements.slotChips, []);
         } else {
-            setFeedback("Selecione servico, profissional e data para ver os horarios livres.");
+            setFeedback("Selecione servico e data para ver os horarios livres, ou use o primeiro horario disponivel.");
             setOptions([], "Selecione um horario");
+            renderSlotButtons(elements.slotChips, []);
         }
+        updateBookingSummary();
     }
 
     async function refreshSlots() {
@@ -250,9 +404,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const mesReferencia = elements.mesReferencia.value;
             const diaSemana = elements.diaSemana.value;
 
-            if (!servico || !profissional || !mesReferencia || !diaSemana) {
+            if (!servico || !mesReferencia || !diaSemana) {
                 setOptions([], "Selecione um horario fixo");
-                setFeedback("Selecione servico, profissional, mes e dia da semana para ver os horarios fixos do pacote.");
+                setFeedback("Selecione servico, mes e dia da semana para ver os horarios fixos do pacote.");
                 return;
             }
 
@@ -261,7 +415,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const url = new URL(elements.slotsUrl, window.location.origin);
             url.searchParams.set("tipo_reserva", bookingType);
             url.searchParams.set("servico", servico);
-            url.searchParams.set("profissional", profissional);
+            if (profissional) {
+                url.searchParams.set("profissional", profissional);
+            }
             url.searchParams.set("mes_referencia", mesReferencia);
             url.searchParams.set("dia_semana", diaSemana);
 
@@ -280,13 +436,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (slots.length) {
                     setOptions(slots, "Selecione um horario fixo");
+                    renderSlotButtons(elements.slotChips, slots);
                     setFeedback(payload.message || "Horarios do pacote atualizados.", "is-success");
                 } else {
                     setOptions([], "Nenhum horario fixo disponivel");
+                    renderSlotButtons(elements.slotChips, []);
                     setFeedback(payload.message || "Nenhum horario fixo ficou livre no mes.", "is-error");
                 }
             } catch (error) {
                 setOptions([], "Erro ao carregar horarios");
+                renderSlotButtons(elements.slotChips, []);
                 setFeedback(error.message, "is-error");
             }
 
@@ -295,9 +454,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const data = elements.data.value;
 
-        if (!servico || !profissional || !data) {
+        if (!servico || !data) {
             setOptions([], "Selecione um horario");
-            setFeedback("Selecione servico, profissional e data para ver os horarios livres.");
+            renderSlotButtons(elements.slotChips, []);
+            setFeedback("Selecione servico e data para ver os horarios livres.");
             return;
         }
 
@@ -306,7 +466,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const url = new URL(elements.slotsUrl, window.location.origin);
         url.searchParams.set("tipo_reserva", bookingType);
         url.searchParams.set("servico", servico);
-        url.searchParams.set("profissional", profissional);
+        if (profissional) {
+            url.searchParams.set("profissional", profissional);
+        }
         url.searchParams.set("data", data);
             if (elements.slotHoldToken?.value) {
                 url.searchParams.set("hold_token", elements.slotHoldToken.value);
@@ -327,14 +489,199 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (slots.length) {
                 setOptions(slots, "Selecione um horario");
+                renderSlotButtons(elements.slotChips, slots.map((slot) => ({ ...slot, data })));
                 setFeedback(payload.message || "Horarios atualizados.", "is-success");
             } else {
                 setOptions([], "Nenhum horario disponivel");
+                renderSlotButtons(elements.slotChips, []);
                 setFeedback(payload.message || "Nenhum horario livre para essa combinacao.", "is-error");
             }
+            renderSlotButtons(elements.quickSlots, payload.suggestions || []);
         } catch (error) {
             setOptions([], "Erro ao carregar horarios");
+            renderSlotButtons(elements.slotChips, []);
             setFeedback(error.message, "is-error");
+        }
+    }
+
+    async function loadFirstAvailableSlots() {
+        if (getBookingType() !== "avulso") {
+            return;
+        }
+
+        const servico = elements.servico.value;
+        const profissional = elements.profissional.value;
+        if (!servico) {
+            setFeedback("Escolha um servico para encontrar o primeiro horario.", "is-error");
+            return;
+        }
+
+        setFeedback("Procurando os primeiros horarios livres...", "is-loading");
+        renderSlotButtons(elements.quickSlots, []);
+
+        const url = new URL(elements.slotsUrl, window.location.origin);
+        url.searchParams.set("tipo_reserva", "avulso");
+        url.searchParams.set("servico", servico);
+        if (profissional) {
+            url.searchParams.set("profissional", profissional);
+        }
+
+        try {
+            const response = await fetch(url.toString(), {
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+            });
+            const payload = await parseJsonResponse(response, "Nao foi possivel buscar horarios livres.");
+            if (!response.ok) {
+                throw new Error(payload.message || "Nao foi possivel buscar horarios livres.");
+            }
+            renderSlotButtons(elements.quickSlots, payload.suggestions || [], "Nenhum horario encontrado nos proximos dias.");
+            setFeedback(payload.message || "Escolha um dos horarios sugeridos.", payload.suggestions?.length ? "is-success" : "is-error");
+        } catch (error) {
+            setFeedback(error.message, "is-error");
+        }
+    }
+
+    async function lookupClientByContact() {
+        if (!elements.clientLookupUrl || !elements.telefone) {
+            return;
+        }
+
+        const telefone = elements.telefone.value || "";
+        const email = elements.email?.value || "";
+        const normalizedPhone = telefone.replace(/\D/g, "");
+        if (normalizedPhone.length < 10 && !email.includes("@")) {
+            return;
+        }
+
+        setClientLookupFeedback("Buscando seu cadastro...", "is-loading");
+        const url = new URL(elements.clientLookupUrl, window.location.origin);
+        if (normalizedPhone) {
+            url.searchParams.set("telefone", normalizedPhone);
+        }
+        if (email) {
+            url.searchParams.set("email", email);
+        }
+
+        try {
+            const response = await fetch(url.toString(), {
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+            });
+            const payload = await parseJsonResponse(response, "Nao foi possivel buscar o cadastro.");
+            if (!response.ok || payload.status !== "sucesso") {
+                throw new Error(payload.message || "Nao foi possivel buscar o cadastro.");
+            }
+
+            if (!payload.cliente) {
+                setClientLookupFeedback(payload.message || "Cliente novo. Continue o cadastro.", "");
+                if (elements.repeatBookingBox) {
+                    elements.repeatBookingBox.innerHTML = "";
+                }
+                return;
+            }
+
+            const cliente = payload.cliente;
+            if (elements.nome && cliente.nome) elements.nome.value = cliente.nome;
+            if (elements.email && cliente.email) elements.email.value = cliente.email;
+            if (elements.telefone && cliente.telefone) elements.telefone.value = cliente.telefone;
+            if (elements.documento && cliente.documento) elements.documento.value = cliente.documento;
+            if (elements.dataNascimento && cliente.data_nascimento) elements.dataNascimento.value = cliente.data_nascimento;
+
+            setClientLookupFeedback(payload.message || "Cadastro encontrado.", "is-success");
+
+            if (elements.repeatBookingBox) {
+                elements.repeatBookingBox.innerHTML = "";
+                if (payload.ultimo_agendamento) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "quick-slot-chip";
+                    button.textContent = `Agendar novamente: ${payload.ultimo_agendamento.servico_nome} com ${payload.ultimo_agendamento.profissional_nome}`;
+                    button.addEventListener("click", () => {
+                        elements.servico.value = String(payload.ultimo_agendamento.servico_id);
+                        elements.profissional.value = String(payload.ultimo_agendamento.profissional_id);
+                        setFeedback("Atendimento anterior selecionado. Agora escolha o primeiro horario disponivel.", "is-success");
+                        loadFirstAvailableSlots();
+                    });
+                    elements.repeatBookingBox.appendChild(button);
+                }
+            }
+        } catch (error) {
+            setClientLookupFeedback(error.message, "is-error");
+        }
+    }
+
+    function applyAiContext(context) {
+        const booking = context?.booking || {};
+        if (booking.servico_id && elements.servico) {
+            elements.servico.value = String(booking.servico_id);
+        }
+        if (booking.profissional_id && elements.profissional) {
+            elements.profissional.value = String(booking.profissional_id);
+        }
+        if (booking.data && elements.data) {
+            elements.data.value = booking.data;
+        }
+        if (booking.hora && elements.hora) {
+            ensureHourOption(booking.hora, booking.hora, booking.profissional_id || "");
+            elements.hora.value = booking.hora;
+        }
+        if (booking.nome_cliente && elements.nome && !elements.nome.value) {
+            elements.nome.value = booking.nome_cliente;
+        }
+        updateBookingSummary();
+    }
+
+    async function sendClientAiMessage(messageOverride = "") {
+        if (!elements.aiChatUrl || !elements.clientAiInput) {
+            return;
+        }
+        const mensagem = (messageOverride || elements.clientAiInput.value || "").trim();
+        if (!mensagem) {
+            setAiFeedback("Digite o pedido de agendamento.", "is-error");
+            return;
+        }
+
+        setAiFeedback("Entendendo seu pedido...", "is-loading");
+        if (elements.clientAiSuggestions) {
+            elements.clientAiSuggestions.innerHTML = "";
+        }
+        try {
+            const response = await fetch(elements.aiChatUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+                },
+                body: JSON.stringify({
+                    telefone: elements.telefone?.value || "",
+                    mensagem,
+                    contexto: window._clientAiContext || {},
+                }),
+            });
+            const payload = await parseJsonResponse(response, "Nao foi possivel entender o pedido.");
+            if (!response.ok || payload.status !== "sucesso") {
+                throw new Error(payload.message || "Nao foi possivel entender o pedido.");
+            }
+            window._clientAiContext = payload.contexto || {};
+            applyAiContext(payload.contexto);
+            setAiFeedback(payload.resposta || "Pedido entendido.", "is-success");
+
+            (payload.sugestoes || []).slice(0, 6).forEach((suggestion) => {
+                if (!elements.clientAiSuggestions) {
+                    return;
+                }
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "quick-slot-chip";
+                button.textContent = suggestion;
+                button.addEventListener("click", () => {
+                    elements.clientAiInput.value = suggestion;
+                    sendClientAiMessage(suggestion);
+                });
+                elements.clientAiSuggestions.appendChild(button);
+            });
+        } catch (error) {
+            setAiFeedback(error.message, "is-error");
         }
     }
 
@@ -356,6 +703,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     elements.hora?.addEventListener("change", () => {
+        const selected = elements.hora.options[elements.hora.selectedIndex];
+        if (!elements.profissional.value && selected?.dataset?.profissionalId) {
+            elements.profissional.value = selected.dataset.profissionalId;
+        }
+        updateBookingSummary();
         reserveSelectedSlotHold();
     });
 
@@ -366,7 +718,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!elements.hora.value) {
             return;
         }
-        if (!elements.slotHoldToken?.value) {
+        if (elements.profissional.value && !elements.slotHoldToken?.value) {
             event.preventDefault();
             setHoldFeedback("Selecione novamente o horario para criar a reserva temporaria.", "is-error");
         }
@@ -379,4 +731,19 @@ document.addEventListener("DOMContentLoaded", () => {
             refreshSlots();
         });
     });
+
+    elements.firstAvailableBtn?.addEventListener("click", loadFirstAvailableSlots);
+    elements.telefone?.addEventListener("blur", lookupClientByContact);
+    elements.email?.addEventListener("blur", lookupClientByContact);
+    elements.clientAiSendBtn?.addEventListener("click", () => sendClientAiMessage());
+    elements.clientAiInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            sendClientAiMessage();
+        }
+    });
+
+    if (elements.servico?.value && getBookingType() === "avulso") {
+        loadFirstAvailableSlots();
+    }
 });

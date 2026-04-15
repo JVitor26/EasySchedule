@@ -154,6 +154,18 @@ def _resolve_company_logo_url(empresa):
     return ""
 
 
+def _portal_url(empresa, fragment="meus-agendamentos"):
+    base_path = f"/cliente/empresa/{empresa.portal_token}/"
+    if fragment:
+        base_path = f"{base_path}#{fragment}"
+
+    base_url = getattr(settings, "STRIPE_DOMAIN_URL", "").strip()
+    if base_url:
+        return urljoin(f"{base_url.rstrip('/')}/", base_path.lstrip("/"))
+
+    return base_path
+
+
 def _booking_message_for_customer(agendamento):
     empresa = agendamento.empresa
     profile_label = empresa.business_profile.get("label", "Operacao")
@@ -167,6 +179,7 @@ def _booking_message_for_customer(agendamento):
         f"Data: {agendamento.data.strftime('%d/%m/%Y')}\n"
         f"Hora: {agendamento.hora.strftime('%H:%M')}\n"
         f"Status: {agendamento.get_status_display()}\n"
+        f"Gerenciar, reagendar ou repetir: {_portal_url(empresa)}\n"
         "Nos vemos em breve!"
     )
 
@@ -197,6 +210,7 @@ def _booking_whatsapp_message_for_customer(agendamento):
         f"Data: {agendamento.data.strftime('%d/%m/%Y')}",
         f"Hora: {agendamento.hora.strftime('%H:%M')}",
         f"Status: {agendamento.get_status_display()}",
+        f"Gerenciar, reagendar ou repetir: {_portal_url(empresa)}",
         "Nos vemos em breve!",
     ]
 

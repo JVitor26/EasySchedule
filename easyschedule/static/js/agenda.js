@@ -64,6 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
         aiChatMessages: document.getElementById("aiChatMessages"),
         aiChatSuggestions: document.getElementById("aiChatSuggestions"),
         aiClientInfo: document.getElementById("aiClientInfo"),
+        aiChatShortcuts: Array.from(document.querySelectorAll("[data-ai-quick-prompt]")),
     };
 
     const moneyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -657,6 +658,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     elements.aiChatSendBtn?.addEventListener("click", sendAiMessage);
     elements.aiChatVoiceBtn?.addEventListener("click", toggleVoiceScheduling);
+    elements.aiChatShortcuts.forEach((button) => {
+        button.addEventListener("click", () => {
+            if (elements.aiChatInput) {
+                elements.aiChatInput.value = button.dataset.aiQuickPrompt || "";
+                elements.aiChatInput.focus();
+            }
+            setAiFeedback("Atalho preenchido. Ajuste telefone, nome e horario antes de enviar.");
+        });
+    });
     elements.aiChatInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();

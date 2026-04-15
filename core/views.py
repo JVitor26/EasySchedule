@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render, redirect
 from django.http import JsonResponse, HttpResponse
 from django.db import connection, transaction
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 import logging
@@ -14,6 +15,7 @@ import json
 import re
 from decimal import Decimal
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 import secrets
 import stripe
 
@@ -367,6 +369,108 @@ def _can_client_change_appointment(agendamento):
     return agendamento.status not in ("cancelado", "finalizado", "no_show") and agendamento.data >= hoje
 
 
+def _date_label(data):
+    today = timezone.localdate()
+    if data == today:
+        return "Hoje"
+    if data == today + timedelta(days=1):
+        return "Amanha"
+    return data.strftime("%d/%m")
+
+
+def _public_portal_path(empresa, params=None, fragment=""):
+    url = reverse("cliente_empresa", args=[empresa.portal_token])
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    if fragment:
+        url = f"{url}#{fragment}"
+    return url
+
+
+def _slot_payload(data, slot, profissional, include_date=True):
+    hora = slot.strftime("%H:%M")
+    if include_date:
+        label = f"{_date_label(data)} as {hora} com {profissional.nome}"
+    else:
+        label = f"{hora} com {profissional.nome}"
+    return {
+        "value": hora,
+        "label": label,
+        "data": data.isoformat(),
+        "hora": hora,
+        "profissional_id": profissional.id,
+        "profissional_nome": profissional.nome,
+    }
+
+
+def _find_next_available_slots(empresa, servico, profissional=None, days=14, limit=6, exclude_hold_token=None):
+    if not empresa or not servico:
+        return []
+
+    professionals = [profissional] if profissional else list(
+        Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome")
+    )
+    today = timezone.localdate()
+    suggestions = []
+    seen = set()
+
+    for offset in range(days):
+        data = today + timedelta(days=offset)
+        for candidate_professional in professionals:
+            slots = list_available_slots(
+                empresa=empresa,
+                profissional=candidate_professional,
+                servico=servico,
+                data=data,
+                exclude_hold_token=exclude_hold_token,
+            )
+            for slot in slots:
+                key = (data.isoformat(), slot.strftime("%H:%M"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                suggestions.append(_slot_payload(data, slot, candidate_professional, include_date=True))
+                if len(suggestions) >= limit:
+                    return suggestions
+
+    return suggestions
+
+
+def _build_booking_initial_from_request(request, empresa):
+    initial = {}
+    cliente = _get_portal_cliente(request, empresa)
+
+    if cliente:
+        initial.update({
+            "nome": cliente.nome,
+            "email": cliente.email,
+            "telefone": cliente.telefone,
+            "documento": cliente.documento,
+            "data_nascimento": cliente.data_nascimento,
+        })
+
+    repeat_id = request.GET.get("repeat")
+    if repeat_id and cliente:
+        repeat_agendamento = (
+            Agendamento.objects.filter(empresa=empresa, cliente=cliente, pk=repeat_id)
+            .select_related("servico", "profissional")
+            .first()
+        )
+        if repeat_agendamento:
+            initial["servico"] = repeat_agendamento.servico_id
+            initial["profissional"] = repeat_agendamento.profissional_id
+
+    servico_id = request.GET.get("servico")
+    if servico_id and Servico.objects.filter(empresa=empresa, ativo=True, pk=servico_id).exists():
+        initial["servico"] = servico_id
+
+    profissional_id = request.GET.get("profissional")
+    if profissional_id and Profissional.objects.filter(empresa=empresa, ativo=True, pk=profissional_id).exists():
+        initial["profissional"] = profissional_id
+
+    return initial
+
+
 def _dispatch_reminder_message(agendamento, janela):
     label = "24h" if janela == "24h" else "2h"
     base_message = (
@@ -669,7 +773,11 @@ def empresa_detail(request, portal_token):
             booking_error_message = "Nao foi possivel concluir sua reserva. Revise os campos obrigatorios e tente novamente."
             messages.error(request, booking_error_message)
     else:
-        form = PublicBookingForm(empresa=empresa, session_key=request.session.session_key)
+        form = PublicBookingForm(
+            empresa=empresa,
+            initial=_build_booking_initial_from_request(request, empresa),
+            session_key=request.session.session_key,
+        )
 
     # Produtos em destaque (top 3)
     top_produtos = (
@@ -700,6 +808,18 @@ def empresa_detail(request, portal_token):
         "booking_error_message": booking_error_message,
     }
     return render(request, "core/cliente_empresa.html", context)
+
+
+def cliente_agendar_servico(request, portal_token, servico_id):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    servico = get_object_or_404(Servico, empresa=empresa, ativo=True, pk=servico_id)
+    return redirect(f"{reverse('cliente_empresa', args=[empresa.portal_token])}?{urlencode({'servico': servico.id})}#bookingForm")
+
+
+def cliente_agendar_profissional(request, portal_token, profissional_id):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    profissional = get_object_or_404(Profissional, empresa=empresa, ativo=True, pk=profissional_id)
+    return redirect(f"{reverse('cliente_empresa', args=[empresa.portal_token])}?{urlencode({'profissional': profissional.id})}#bookingForm")
 
 
 def password_recovery_request(request):
@@ -862,25 +982,52 @@ def available_slots_api(request, portal_token):
         except (TypeError, ValueError):
             selected_weekday = None
 
-        if not all([servico, profissional, selected_month]) or selected_weekday is None:
+        if not all([servico, selected_month]) or selected_weekday is None:
             return JsonResponse({
                 "slots": [],
                 "message": "Selecione servico, profissional, mes e dia da semana.",
             })
 
-        slots, occurrence_dates = list_monthly_available_slots(
-            empresa=empresa,
-            profissional=profissional,
-            servico=servico,
-            month_reference=selected_month,
-            weekday=selected_weekday,
+        professionals = [profissional] if profissional else list(
+            Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome")
         )
+        slots_by_time = {}
+        occurrence_dates = []
+        for item_profissional in professionals:
+            slots, dates = list_monthly_available_slots(
+                empresa=empresa,
+                profissional=item_profissional,
+                servico=servico,
+                month_reference=selected_month,
+                weekday=selected_weekday,
+            )
+            if dates and not occurrence_dates:
+                occurrence_dates = dates
+            for slot in slots:
+                slot_key = slot.strftime("%H:%M")
+                slots_by_time.setdefault(slot_key, {
+                    "slot": slot,
+                    "profissional": item_profissional,
+                })
+        slot_items = [slots_by_time[key] for key in sorted(slots_by_time)]
 
         payload = {
-            "slots": [{"value": slot.strftime("%H:%M"), "label": slot.strftime("%H:%M")} for slot in slots],
+            "slots": [
+                {
+                    "value": item["slot"].strftime("%H:%M"),
+                    "label": (
+                        item["slot"].strftime("%H:%M")
+                        if profissional else
+                        f"{item['slot'].strftime('%H:%M')} com {item['profissional'].nome}"
+                    ),
+                    "profissional_id": item["profissional"].id,
+                    "profissional_nome": item["profissional"].nome,
+                }
+                for item in slot_items
+            ],
             "message": (
                 f"Pacote com {len(occurrence_dates)} encontro(s) no mes. Escolha um horario livre em todas as semanas."
-                if slots else
+                if slot_items else
                 "Nenhum horario fixo ficou livre em todas as semanas desse pacote."
             ),
         }
@@ -893,20 +1040,70 @@ def available_slots_api(request, portal_token):
     except Exception:
         selected_date = None
 
-    if not all([servico, profissional, selected_date]):
-        return JsonResponse({"slots": [], "message": "Selecione servico, profissional e data."})
+    if servico and not selected_date:
+        suggestions = _find_next_available_slots(
+            empresa=empresa,
+            servico=servico,
+            profissional=profissional,
+            exclude_hold_token=hold_token,
+        )
+        return JsonResponse({
+            "slots": [],
+            "suggestions": suggestions,
+            "message": (
+                "Estes sao os primeiros horarios livres encontrados."
+                if suggestions else
+                "Nenhum horario livre encontrado nos proximos dias."
+            ),
+        })
 
-    slots = list_available_slots(
+    if not all([servico, selected_date]):
+        return JsonResponse({"slots": [], "suggestions": [], "message": "Selecione servico e data."})
+
+    professionals = [profissional] if profissional else list(
+        Profissional.objects.filter(empresa=empresa, ativo=True).order_by("nome")
+    )
+    slots_by_time = {}
+    for item_profissional in professionals:
+        slots = list_available_slots(
+            empresa=empresa,
+            profissional=item_profissional,
+            servico=servico,
+            data=selected_date,
+            exclude_hold_token=hold_token,
+        )
+        for slot in slots:
+            slot_key = slot.strftime("%H:%M")
+            slots_by_time.setdefault(slot_key, {
+                "slot": slot,
+                "profissional": item_profissional,
+            })
+
+    slot_items = [slots_by_time[key] for key in sorted(slots_by_time)]
+    suggestions = _find_next_available_slots(
         empresa=empresa,
-        profissional=profissional,
         servico=servico,
-        data=selected_date,
+        profissional=profissional,
         exclude_hold_token=hold_token,
+        limit=4,
     )
 
     payload = {
-        "slots": [{"value": slot.strftime("%H:%M"), "label": slot.strftime("%H:%M")} for slot in slots],
-        "message": "Horarios disponiveis carregados." if slots else "Nenhum horario livre para essa combinacao.",
+        "slots": [
+            {
+                "value": item["slot"].strftime("%H:%M"),
+                "label": (
+                    item["slot"].strftime("%H:%M")
+                    if profissional else
+                    f"{item['slot'].strftime('%H:%M')} com {item['profissional'].nome}"
+                ),
+                "profissional_id": item["profissional"].id,
+                "profissional_nome": item["profissional"].nome,
+            }
+            for item in slot_items
+        ],
+        "suggestions": suggestions,
+        "message": "Horarios disponiveis carregados." if slot_items else "Nenhum horario livre para essa combinacao.",
     }
     return JsonResponse(payload)
 
@@ -1167,6 +1364,73 @@ def portal_logout_api(request, portal_token):
     return JsonResponse({"status": "sucesso"})
 
 
+@require_http_methods(["GET"])
+def cliente_lookup_api(request, portal_token):
+    empresa = _get_portal_empresa_or_404(portal_token)
+    access_denied = _enforce_company_portal_access(request, empresa)
+    if access_denied:
+        return access_denied
+
+    telefone = re.sub(r"\D", "", request.GET.get("telefone", ""))
+    email = (request.GET.get("email") or "").strip().lower()
+
+    if not telefone and not email:
+        return JsonResponse({"status": "erro", "message": "Informe WhatsApp ou email para buscar."}, status=400)
+
+    cliente = None
+    if telefone:
+        cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
+    if cliente is None and email:
+        cliente = Pessoa.objects.filter(empresa=empresa, email=email).first()
+
+    if cliente is None:
+        return JsonResponse({"status": "sucesso", "cliente": None, "message": "Cliente novo. Continue com poucos dados."})
+
+    _set_portal_cliente(request, empresa.id, cliente.id)
+    ultimo = (
+        Agendamento.objects.filter(empresa=empresa, cliente=cliente)
+        .select_related("servico", "profissional")
+        .order_by("-data", "-hora")
+        .first()
+    )
+
+    payload = {
+        "status": "sucesso",
+        "message": "Cliente encontrado. Dados preenchidos para agilizar.",
+        "cliente": {
+            "id": cliente.id,
+            "nome": cliente.nome,
+            "email": cliente.email or "",
+            "telefone": cliente.telefone or "",
+            "documento": cliente.documento or "",
+            "data_nascimento": cliente.data_nascimento.isoformat() if cliente.data_nascimento else "",
+        },
+        "ultimo_agendamento": None,
+    }
+
+    if ultimo:
+        payload["ultimo_agendamento"] = {
+            "id": ultimo.id,
+            "servico_id": ultimo.servico_id,
+            "servico_nome": ultimo.servico.nome,
+            "profissional_id": ultimo.profissional_id,
+            "profissional_nome": ultimo.profissional.nome,
+            "data": ultimo.data.strftime("%d/%m/%Y"),
+            "hora": ultimo.hora.strftime("%H:%M"),
+            "repeat_url": _public_portal_path(
+                empresa,
+                params={
+                    "repeat": ultimo.id,
+                    "servico": ultimo.servico_id,
+                    "profissional": ultimo.profissional_id,
+                },
+                fragment="bookingForm",
+            ),
+        }
+
+    return JsonResponse(payload)
+
+
 @require_http_methods(["POST"])
 def cliente_agendamentos_api(request, portal_token):
     empresa = _get_portal_empresa_or_404(portal_token)
@@ -1205,7 +1469,9 @@ def cliente_agendamentos_api(request, portal_token):
     for ag in agendamentos:
         payload.append({
             "id": ag.id,
+            "servico_id": ag.servico_id,
             "servico": ag.servico.nome,
+            "profissional_id": ag.profissional_id,
             "profissional": ag.profissional.nome,
             "data": ag.data.strftime("%d/%m/%Y"),
             "hora": ag.hora.strftime("%H:%M"),
@@ -1218,6 +1484,15 @@ def cliente_agendamentos_api(request, portal_token):
             "can_change": _can_client_change_appointment(ag),
             "agendamento_iso_date": ag.data.isoformat(),
             "agendamento_hour": ag.hora.strftime("%H:%M"),
+            "repeat_url": _public_portal_path(
+                empresa,
+                params={
+                    "repeat": ag.id,
+                    "servico": ag.servico_id,
+                    "profissional": ag.profissional_id,
+                },
+                fragment="bookingForm",
+            ),
         })
 
     return JsonResponse({

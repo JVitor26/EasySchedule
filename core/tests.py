@@ -74,6 +74,15 @@ class HomepageRoutingTests(TestCase):
             r'class="app-mobile-link[^"]*" href="/profissionais/">Barbeiros</a>',
         )
 
+    def test_dashboard_exibe_atalhos_de_agendamento_rapido(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse("dashboard_home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Atalhos para agendar rapido")
+        self.assertContains(response, "Primeiro encaixe")
+
 
 class InternalAuthBackendTests(TestCase):
     def setUp(self):
@@ -175,6 +184,77 @@ class PublicCustomerBookingTests(TestCase):
         self.assertNotIn("09:00", values)
         self.assertNotIn("09:30", values)
         self.assertIn("10:00", values)
+
+    def test_api_publica_sugere_primeiros_horarios_sem_profissional(self):
+        response = self.client.get(
+            reverse("cliente_horarios", args=[self.empresa.portal_token]),
+            {
+                "servico": self.servico.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["suggestions"])
+        self.assertEqual(payload["suggestions"][0]["profissional_id"], self.profissional.pk)
+        self.assertIn("com Rafael", payload["suggestions"][0]["label"])
+
+    def test_cliente_publico_pode_agendar_com_qualquer_profissional(self):
+        response = self.client.post(
+            reverse("cliente_empresa", args=[self.empresa.portal_token]),
+            {
+                "nome": "Cliente Sem Preferencia",
+                "email": "sem-pref@example.com",
+                "telefone": "(65) 99999-2222",
+                "documento": "98765432122",
+                "data_nascimento": "1995-05-10",
+                "servico": self.servico.pk,
+                "profissional": "",
+                "data": self.data_agendamento.isoformat(),
+                "hora": "10:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        agendamento = Agendamento.objects.get(cliente__email="sem-pref@example.com")
+        self.assertEqual(agendamento.profissional_id, self.profissional.pk)
+
+    def test_portal_publico_exibe_fluxo_facil_e_links_diretos(self):
+        response = self.client.get(reverse("cliente_empresa", args=[self.empresa.portal_token]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Agende em 3 passos")
+        self.assertContains(response, "Primeiro horario disponivel")
+        self.assertContains(response, "Agendar por mensagem")
+        self.assertContains(response, "Qualquer barbeiro")
+        self.assertContains(response, reverse("cliente_agendar_servico", args=[self.empresa.portal_token, self.servico.pk]))
+        self.assertContains(response, reverse("cliente_agendar_profissional", args=[self.empresa.portal_token, self.profissional.pk]))
+
+    def test_busca_cliente_por_telefone_retorna_ultimo_atendimento_para_repetir(self):
+        response = self.client.get(
+            reverse("cliente_lookup_api", args=[self.empresa.portal_token]),
+            {"telefone": "65988887777"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["cliente"]["nome"], "Cliente Existente")
+        self.assertEqual(payload["ultimo_agendamento"]["servico_id"], self.servico.pk)
+        self.assertEqual(payload["ultimo_agendamento"]["profissional_id"], self.profissional.pk)
+        self.assertIn("repeat=", payload["ultimo_agendamento"]["repeat_url"])
+
+    def test_api_de_agendamentos_retorna_ids_para_agendar_novamente(self):
+        response = self.client.post(
+            reverse("cliente_agendamentos_api", args=[self.empresa.portal_token]),
+            data=json.dumps({"telefone": "65988887777"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        agendamento = response.json()["agendamentos"][0]
+        self.assertEqual(agendamento["servico_id"], self.servico.pk)
+        self.assertEqual(agendamento["profissional_id"], self.profissional.pk)
+        self.assertIn("repeat=", agendamento["repeat_url"])
 
     def test_cliente_publico_consegue_cadastrar_e_agendar(self):
         response = self.client.post(

@@ -289,6 +289,109 @@
     gap: 1.15rem;
 }
 
+.booking-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7rem;
+}
+
+.booking-steps span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.6rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    border: 1px solid var(--border-strong);
+    color: var(--text-1);
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
+.booking-assist-panel,
+.booking-step-card,
+.booking-summary-card {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+}
+
+.booking-assist-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.booking-assist-panel strong,
+.booking-summary-card strong {
+    color: var(--text-1);
+}
+
+.booking-assist-panel p {
+    margin: 0.35rem 0 0;
+    color: var(--text-3);
+    line-height: 1.65;
+}
+
+.booking-step-card h3 {
+    margin: 0;
+    color: var(--text-1);
+    font-size: 1.05rem;
+}
+
+.quick-booking-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.quick-slot-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.5rem 0 0.9rem;
+}
+
+.quick-slot-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.65rem;
+    padding: 0.68rem 0.95rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-soft);
+    background: var(--surface-2);
+    color: var(--text-1);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.quick-slot-chip:hover,
+.quick-slot-chip:focus-visible {
+    border-color: var(--border-strong);
+    box-shadow: var(--focus-ring);
+}
+
+.booking-summary-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.8rem;
+}
+
+.booking-summary-card span {
+    color: var(--text-2);
+}
+
+.client-form-grid-compact {
+    grid-template-columns: 1fr auto;
+}
+
 .client-form-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -576,6 +679,11 @@
     }
 
     .client-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .booking-steps,
+    .client-form-grid-compact {
         grid-template-columns: 1fr;
     }
 
