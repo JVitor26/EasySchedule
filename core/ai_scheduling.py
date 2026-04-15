@@ -60,6 +60,13 @@ WEEKDAY_LABELS = {
     6: "domingo",
 }
 
+TEMPORARY_CLIENT_NAMES = {
+    "cliente ia",
+    "cliente nao cadastrado",
+    "cliente não cadastrado",
+    "cliente sem nome",
+}
+
 
 def _normalize_text(value):
     normalized = unicodedata.normalize("NFKD", value or "")
@@ -67,6 +74,10 @@ def _normalize_text(value):
         char for char in normalized if not unicodedata.combining(char)
     )
     return re.sub(r"\s+", " ", without_accents.strip().lower())
+
+
+def _is_temporary_client_name(value):
+    return _normalize_text(value) in TEMPORARY_CLIENT_NAMES
 
 
 def _only_digits(value):
@@ -329,17 +340,17 @@ def _with_prefix(response, prefix):
 def _upsert_cliente(empresa, telefone, nome):
     cliente = Pessoa.objects.filter(empresa=empresa, telefone=telefone).first()
     if cliente:
-        if nome and not cliente.nome:
+        if nome and (not cliente.nome or _is_temporary_client_name(cliente.nome)):
             cliente.nome = nome
             cliente.save(update_fields=["nome"])
         return cliente, True
     return Pessoa.objects.create(
         empresa=empresa,
-        nome=nome or "Cliente nao cadastrado",
+        nome=nome or "Cliente sem nome",
         telefone=telefone,
         email="",
         documento="",
-        observacoes="Cadastro criado automaticamente pelo assistente de agendamento por audio.",
+        observacoes="Cadastro criado automaticamente pelo assistente de agendamento.",
     ), False
 
 
@@ -376,6 +387,9 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
 
     cliente_cadastrado = cliente is not None
     if cliente:
+        if possible_name and _is_temporary_client_name(cliente.nome):
+            cliente.nome = possible_name
+            cliente.save(update_fields=["nome"])
         booking["cliente_id"] = cliente.id
         booking["nome_cliente"] = cliente.nome
         booking["telefone"] = cliente.telefone
@@ -543,7 +557,7 @@ def handle_ai_scheduling_message(empresa, telefone, mensagem, contexto=None):
             profissional=profissional,
             data=selected_date,
             hora=forms.TimeField().clean(selected_time),
-            observacoes="Agendamento criado pelo assistente de IA.",
+            observacoes="Agendado por IA.",
             status="pendente",
             pagamento_status="pendente",
             metodo_pagamento="",

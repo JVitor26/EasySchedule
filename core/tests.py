@@ -1239,7 +1239,49 @@ class AISchedulingChatTests(TestCase):
         self.assertEqual(agendamento.status, "pendente")
         self.assertEqual(agendamento.cliente.telefone, "65977771111")
         self.assertEqual(agendamento.cliente.nome, "Laura")
+        self.assertEqual(agendamento.observacoes, "Agendado por IA.")
         self.assertIn("email", agendamento.cliente.campos_cadastro_pendentes())
+
+    def test_ai_chat_atualiza_nome_temporario_com_nome_falado(self):
+        cliente = Pessoa.objects.create(
+            empresa=self.empresa,
+            nome="Cliente IA",
+            telefone="65977772222",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "telefone 65 97777 2222 cliente Beatriz Corte completo com Rafael amanhã às 15 horas confirmar",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["acao"], "agendamento_criado")
+
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.nome, "Beatriz")
+        agendamento = Agendamento.objects.get(pk=payload["agendamento_id"])
+        self.assertEqual(agendamento.cliente.nome, "Beatriz")
+
+    def test_ai_chat_nao_cria_cliente_ia_quando_nome_nao_foi_falado(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("ai_scheduling_dashboard_api"),
+            data=json.dumps({
+                "mensagem": "telefone 65 97777 3333 Corte completo com Rafael amanhã às 15 horas confirmar",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        agendamento = Agendamento.objects.get(pk=payload["agendamento_id"])
+        self.assertEqual(agendamento.cliente.nome, "Cliente sem nome")
+        self.assertNotEqual(agendamento.cliente.nome, "Cliente IA")
 
     def test_confirmar_agendamento_exige_cadastro_completo_do_cliente(self):
         cliente = Pessoa.objects.create(

@@ -24,7 +24,12 @@ class Pessoa(models.Model):
     def campos_cadastro_pendentes(self):
         campos = []
         nome_normalizado = (self.nome or "").strip().lower()
-        nomes_temporarios = {"cliente ia", "cliente nao cadastrado", "cliente não cadastrado"}
+        nomes_temporarios = {
+            "cliente ia",
+            "cliente nao cadastrado",
+            "cliente não cadastrado",
+            "cliente sem nome",
+        }
 
         if not nome_normalizado or nome_normalizado in nomes_temporarios:
             campos.append("nome")
