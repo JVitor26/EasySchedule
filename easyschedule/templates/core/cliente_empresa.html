@@ -214,8 +214,8 @@
 
         <section class="booking-assist-panel">
           <div>
-            <strong>Agendar por mensagem</strong>
-            <p>Digite como voce falaria no WhatsApp. Ex.: Quero corte amanha depois das 15h.</p>
+            <strong>Agendar por mensagem ou audio</strong>
+            <p>Digite ou grave como voce falaria no WhatsApp. Ex.: Quero corte amanha depois das 15h.</p>
           </div>
           <div class="client-form-grid client-form-grid-compact">
             <div class="client-form-group client-form-group-full">
@@ -223,9 +223,11 @@
               <input id="clientAiInput" type="text" autocomplete="off" placeholder="Quero agendar corte amanha a tarde">
             </div>
             <div class="client-form-actions">
+              <button type="button" id="clientAiVoiceBtn" class="btn-secondary" aria-pressed="false">Gravar audio</button>
               <button type="button" id="clientAiSendBtn" class="btn-secondary">Entender pedido</button>
             </div>
           </div>
+          <p id="clientAiVoiceStatus" class="client-ai-voice-status" aria-live="polite"></p>
           <p id="clientAiFeedback" class="slots-feedback"></p>
           <div id="clientAiSuggestions" class="quick-slot-grid"></div>
         </section>

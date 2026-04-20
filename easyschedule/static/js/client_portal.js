@@ -52,9 +52,13 @@ document.addEventListener("DOMContentLoaded", () => {
         repeatBookingBox: document.getElementById("repeatBookingBox"),
         clientAiInput: document.getElementById("clientAiInput"),
         clientAiSendBtn: document.getElementById("clientAiSendBtn"),
+        clientAiVoiceBtn: document.getElementById("clientAiVoiceBtn"),
+        clientAiVoiceStatus: document.getElementById("clientAiVoiceStatus"),
         clientAiFeedback: document.getElementById("clientAiFeedback"),
         clientAiSuggestions: document.getElementById("clientAiSuggestions"),
     };
+
+    const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     function readCookie(name) {
         const prefix = `${name}=`;
@@ -92,6 +96,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const csrfToken = getCsrfToken();
 
     let holdTimer = null;
+    let clientVoiceRecognition = null;
+    let clientVoiceIsListening = false;
+    let clientVoiceHadError = false;
+    let clientVoiceTranscript = "";
 
     function getBookingType() {
         const selected = elements.bookingTypeInputs.find((input) => input.checked);
@@ -136,6 +144,17 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.clientAiFeedback.classList.remove("is-loading", "is-success", "is-error");
         if (state) {
             elements.clientAiFeedback.classList.add(state);
+        }
+    }
+
+    function setClientVoiceStatus(message = "", isListening = false) {
+        if (elements.clientAiVoiceStatus) {
+            elements.clientAiVoiceStatus.textContent = message;
+        }
+        if (elements.clientAiVoiceBtn) {
+            elements.clientAiVoiceBtn.textContent = isListening ? "Parar audio" : "Gravar audio";
+            elements.clientAiVoiceBtn.setAttribute("aria-pressed", isListening ? "true" : "false");
+            elements.clientAiVoiceBtn.classList.toggle("is-listening", isListening);
         }
     }
 
@@ -685,6 +704,97 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function getClientVoiceRecognition() {
+        if (!SpeechRecognitionConstructor) {
+            return null;
+        }
+
+        if (clientVoiceRecognition) {
+            return clientVoiceRecognition;
+        }
+
+        clientVoiceRecognition = new SpeechRecognitionConstructor();
+        clientVoiceRecognition.lang = "pt-BR";
+        clientVoiceRecognition.continuous = false;
+        clientVoiceRecognition.interimResults = true;
+
+        clientVoiceRecognition.onstart = () => {
+            clientVoiceHadError = false;
+            clientVoiceIsListening = true;
+            clientVoiceTranscript = "";
+            if (elements.clientAiInput) {
+                elements.clientAiInput.value = "";
+            }
+            setAiFeedback("");
+            setClientVoiceStatus("Ouvindo seu pedido...", true);
+        };
+
+        clientVoiceRecognition.onresult = (event) => {
+            let interimTranscript = "";
+
+            for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                const transcript = event.results[index][0]?.transcript || "";
+                if (event.results[index].isFinal) {
+                    clientVoiceTranscript += ` ${transcript}`;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            const message = `${clientVoiceTranscript} ${interimTranscript}`.trim();
+            if (message && elements.clientAiInput) {
+                elements.clientAiInput.value = message;
+            }
+        };
+
+        clientVoiceRecognition.onerror = (event) => {
+            clientVoiceHadError = true;
+            const message = event.error === "no-speech"
+                ? "Nao ouvi nada. Tente gravar novamente ou digite o pedido."
+                : "Nao consegui usar o audio agora. Digite o pedido para continuar.";
+            setAiFeedback(message, "is-error");
+        };
+
+        clientVoiceRecognition.onend = () => {
+            clientVoiceIsListening = false;
+            setClientVoiceStatus("", false);
+
+            if (clientVoiceHadError) {
+                return;
+            }
+
+            const message = (elements.clientAiInput?.value || "").trim();
+            if (!message) {
+                setAiFeedback("Nao ouvi nada. Tente gravar novamente ou digite o pedido.", "is-error");
+                return;
+            }
+
+            setClientVoiceStatus("Audio transcrito. Entendendo seu pedido...");
+            sendClientAiMessage(message);
+        };
+
+        return clientVoiceRecognition;
+    }
+
+    function toggleClientVoiceScheduling() {
+        const recognition = getClientVoiceRecognition();
+        if (!recognition) {
+            setAiFeedback("Agendamento por audio indisponivel neste navegador. Use a mensagem escrita.", "is-error");
+            return;
+        }
+
+        if (clientVoiceIsListening) {
+            recognition.stop();
+            return;
+        }
+
+        try {
+            recognition.start();
+        } catch (_error) {
+            setAiFeedback("Nao consegui iniciar o audio. Tente novamente ou use o texto.", "is-error");
+        }
+    }
+
     syncBookingMode();
 
     [
@@ -736,12 +846,19 @@ document.addEventListener("DOMContentLoaded", () => {
     elements.telefone?.addEventListener("blur", lookupClientByContact);
     elements.email?.addEventListener("blur", lookupClientByContact);
     elements.clientAiSendBtn?.addEventListener("click", () => sendClientAiMessage());
+    elements.clientAiVoiceBtn?.addEventListener("click", toggleClientVoiceScheduling);
     elements.clientAiInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
             sendClientAiMessage();
         }
     });
+
+    if (elements.clientAiVoiceBtn && !SpeechRecognitionConstructor) {
+        elements.clientAiVoiceBtn.disabled = true;
+        elements.clientAiVoiceBtn.title = "Audio indisponivel neste navegador.";
+        setClientVoiceStatus("Audio indisponivel neste navegador. Use a mensagem escrita.");
+    }
 
     if (elements.servico?.value && getBookingType() === "avulso") {
         loadFirstAvailableSlots();

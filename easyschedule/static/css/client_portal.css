@@ -335,6 +335,13 @@
     line-height: 1.65;
 }
 
+.client-ai-voice-status {
+    min-height: 1.25rem;
+    margin: 0.45rem 0 0;
+    color: var(--text-3);
+    font-size: 0.92rem;
+}
+
 .booking-step-card h3 {
     margin: 0;
     color: var(--text-1);
